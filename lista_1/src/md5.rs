@@ -9,16 +9,9 @@ use std::fmt::Display;
 use std::io::BufReader;
 use std::io::Read;
 use std::num::Wrapping;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread;
 use std::time::Instant;
 use std::usize;
 use std::vec::Vec;
-
-use rand::random;
 
 const BLOCK_SIZE: usize = 512;
 pub const INITIAL_STATE: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
@@ -93,7 +86,6 @@ const A6_B5_SAME_BITS: u32 = 0x00020000;
 const D6_ZERO_BITS: u32 = 0x80000000;
 const C6_ZERO_BITS: u32 = 0x80000000;
 const B6_C6_DIFFERENT_BITS: u32 = 0x80000000;
-// const PHI34_ONE_BITS: u32 = 0x80000000;
 const B12_D12_SAME_BITS: u32 = 0x80000000;
 const A13_C12_SAME_BITS: u32 = 0x80000000;
 const D13_B12_DIFFERENT_BITS: u32 = 0x80000000;
@@ -111,9 +103,6 @@ const A16_ONE_BITS: u32 = 0x02000000;
 const A16_C15_SAME_BITS: u32 = 0x80000000;
 const D16_ONE_BITS: u32 = 0x02000000;
 const D16_B15_SAME_BITS: u32 = 0x80000000;
-// const C16_ONE_BITS: u32 = 0x02000000;
-// const C16_A16_SAME_BITS: u32 = 0x80000000;
-// const B16_ONE_BITS: u32 = 0x02000000;
 
 struct InternalState {
     a: u32,
@@ -168,7 +157,7 @@ fn apply_same_bits(v: u32, u: u32, mask: u32) -> u32 {
     return (v | (u & mask)) & (u | (!mask));
 }
 
-fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]> {
+fn validate_candidate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]> {
     let mut words: [u32; 16] = candidate;
 
     let mut a = state[0];
@@ -183,7 +172,7 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     a = transform(tr_f, a, b, c, d, words[0], 0xD76AA478, 7);
     a = apply_one_bits(a, A1_ONE_BITS);
     a = apply_zero_bits(a, A1_ZERO_BITS);
-    words[0] = reverse_transfrom(a, b, c, d, 0xD76AA478, 7, orig);
+    words[0] = reverse_transform(a, b, c, d, 0xD76AA478, 7, orig);
 
     // d1
     orig = d;
@@ -191,7 +180,7 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     d = apply_one_bits(d, D1_ONE_BITS);
     d = apply_zero_bits(d, D1_ZERO_BITS);
     d = apply_same_bits(d, a, D1_A1_SAME_BITS);
-    words[1] = reverse_transfrom(d, a, b, c, 0xE8C7B756, 12, orig);
+    words[1] = reverse_transform(d, a, b, c, 0xE8C7B756, 12, orig);
 
     // c1
     orig = c;
@@ -199,7 +188,7 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     c = apply_one_bits(c, C1_ONE_BITS);
     c = apply_zero_bits(c, C1_ZERO_BITS);
     c = apply_same_bits(c, d, C1_D1_SAME_BITS);
-    words[2] = reverse_transfrom(c, d, a, b, 0x242070DB, 17, orig);
+    words[2] = reverse_transform(c, d, a, b, 0x242070DB, 17, orig);
 
     // b1
     orig = b;
@@ -207,21 +196,21 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     b = apply_one_bits(b, B1_ONE_BITS);
     b = apply_zero_bits(b, B1_ZERO_BITS);
     b = apply_same_bits(b, c, B1_C1_SAME_BITS);
-    words[3] = reverse_transfrom(b, c, d, a, 0xC1BDCEEE, 22, orig);
+    words[3] = reverse_transform(b, c, d, a, 0xC1BDCEEE, 22, orig);
 
     // a2
     orig = a;
     a = transform(tr_f, a, b, c, d, words[4], 0xF57C0FAF, 7);
     a = apply_one_bits(a, A2_ONE_BITS);
     a = apply_zero_bits(a, A2_ZERO_BITS);
-    words[4] = reverse_transfrom(a, b, c, d, 0xF57C0FAF, 7, orig);
+    words[4] = reverse_transform(a, b, c, d, 0xF57C0FAF, 7, orig);
 
     // d2
     orig = d;
     d = transform(tr_f, d, a, b, c, words[5], 0x4787C62A, 12);
     d = apply_one_bits(d, D2_ONE_BITS);
     d = apply_zero_bits(d, D2_ZERO_BITS);
-    words[5] = reverse_transfrom(d, a, b, c, 0x4787C62A, 12, orig);
+    words[5] = reverse_transform(d, a, b, c, 0x4787C62A, 12, orig);
 
     // c2
     orig = c;
@@ -229,7 +218,7 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     c = apply_one_bits(c, C2_ONE_BITS);
     c = apply_zero_bits(c, C2_ZERO_BITS);
     c = apply_same_bits(c, d, C2_D2_SAME_BITS);
-    words[6] = reverse_transfrom(c, d, a, b, 0xA8304613, 17, orig);
+    words[6] = reverse_transform(c, d, a, b, 0xA8304613, 17, orig);
 
     // b2
     orig = b;
@@ -237,7 +226,7 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     b = apply_one_bits(b, B2_ONE_BITS);
     b = apply_zero_bits(b, B2_ZERO_BITS);
     b = apply_same_bits(b, c, B2_C2_SAME_BITS);
-    words[7] = reverse_transfrom(b, c, d, a, 0xFD469501, 22, orig);
+    words[7] = reverse_transform(b, c, d, a, 0xFD469501, 22, orig);
 
     // a3
     orig = a;
@@ -245,14 +234,14 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     a = apply_one_bits(a, A3_ONE_BITS);
     a = apply_zero_bits(a, A3_ZERO_BITS);
     a = apply_same_bits(a, b, A3_B2_SAME_BITS);
-    words[8] = reverse_transfrom(a, b, c, d, 0x698098D8, 7, orig);
+    words[8] = reverse_transform(a, b, c, d, 0x698098D8, 7, orig);
 
     // d3
     orig = d;
     d = transform(tr_f, d, a, b, c, words[9], 0x8B44F7AF, 12);
     d = apply_one_bits(d, D3_ONE_BITS);
     d = apply_zero_bits(d, D3_ZERO_BITS);
-    words[9] = reverse_transfrom(d, a, b, c, 0x8B44F7AF, 12, orig);
+    words[9] = reverse_transform(d, a, b, c, 0x8B44F7AF, 12, orig);
 
     // c3
     orig = c;
@@ -260,7 +249,7 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     c = apply_one_bits(c, C3_ONE_BITS);
     c = apply_zero_bits(c, C3_ZERO_BITS);
     c = apply_same_bits(c, d, C3_D3_SAME_BITS);
-    words[10] = reverse_transfrom(c, d, a, b, 0xFFFF5BB1, 17, orig);
+    words[10] = reverse_transform(c, d, a, b, 0xFFFF5BB1, 17, orig);
 
     // b3
     orig = b;
@@ -268,35 +257,35 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     b = apply_one_bits(b, B3_ONE_BITS);
     b = apply_zero_bits(b, B3_ZERO_BITS);
     b = apply_same_bits(b, c, B3_C3_SAME_BITS);
-    words[11] = reverse_transfrom(b, c, d, a, 0x895CD7BE, 22, orig);
+    words[11] = reverse_transform(b, c, d, a, 0x895CD7BE, 22, orig);
 
     // a4
     orig = a;
     a = transform(tr_f, a, b, c, d, words[12], 0x6B901122, 7);
     a = apply_one_bits(a, A4_ONE_BITS);
     a = apply_zero_bits(a, A4_ZERO_BITS);
-    words[12] = reverse_transfrom(a, b, c, d, 0x6B901122, 7, orig);
+    words[12] = reverse_transform(a, b, c, d, 0x6B901122, 7, orig);
 
     // d4
     orig = d;
     d = transform(tr_f, d, a, b, c, words[13], 0xFD987193, 12);
     d = apply_one_bits(d, D4_ONE_BITS);
     d = apply_zero_bits(d, D4_ZERO_BITS);
-    words[13] = reverse_transfrom(d, a, b, c, 0xFD987193, 12, orig);
+    words[13] = reverse_transform(d, a, b, c, 0xFD987193, 12, orig);
 
     // c4
     orig = c;
     c = transform(tr_f, c, d, a, b, words[14], 0xA679438E, 17);
     c = apply_one_bits(c, C4_ONE_BITS);
     c = apply_zero_bits(c, C4_ZERO_BITS);
-    words[14] = reverse_transfrom(c, d, a, b, 0xA679438E, 17, orig);
+    words[14] = reverse_transform(c, d, a, b, 0xA679438E, 17, orig);
 
     // b4
     orig = b;
     b = transform(tr_f, b, c, d, a, words[15], 0x49B40821, 22);
     b = apply_one_bits(b, B4_ONE_BITS);
     b = apply_zero_bits(b, B4_ZERO_BITS);
-    words[15] = reverse_transfrom(b, c, d, a, 0x49B40821, 22, orig);
+    words[15] = reverse_transform(b, c, d, a, 0x49B40821, 22, orig);
 
     // round 2
 
@@ -505,7 +494,7 @@ fn validate_candiate(state: &[u32; 4], candidate: [u32; 16]) -> Option<[u32; 16]
     Some(words)
 }
 
-fn reverse_transfrom(a: u32, b: u32, c: u32, d: u32, t: u32, s: u32, orig: u32) -> u32 {
+fn reverse_transform(a: u32, b: u32, c: u32, d: u32, t: u32, s: u32, orig: u32) -> u32 {
     return (a.wrapping_sub(b))
         .rotate_right(s)
         .wrapping_sub(tr_f(b, c, d))
@@ -693,6 +682,16 @@ impl Display for Collision {
     }
 }
 
+#[link(name = "md5", kind = "static")]
+extern "C" {
+    fn validate_candidates_cuda(
+        state: *const u32,
+        candidates: *mut u32,
+        found: *mut u8,
+        batch_size: usize,
+    );
+}
+
 pub fn second_step(m0: [u32; 16], m0_prim: [u32; 16]) -> Collision {
     let mut delta_m0: [u32; 16] = [0; 16];
 
@@ -705,44 +704,40 @@ pub fn second_step(m0: [u32; 16], m0_prim: [u32; 16]) -> Collision {
     let state_m0 = hash(&INITIAL_STATE, &m0);
     let state_m0_prim = hash(&INITIAL_STATE, &m0_prim);
 
-    let mut count: usize = 0;
     let start = Instant::now();
 
-    const NTHREADS: usize = 12;
+    const BATCH_SIZE: usize = 256 * 256;
 
-    let mut children = vec![];
+    let mut candidates: [u32; 16 * BATCH_SIZE] = [0; 16 * BATCH_SIZE];
 
-    let shoudl_stop = Arc::new(AtomicBool::new(false));
+    loop {
+        for i in 0..16 {
+            for j in 0..BATCH_SIZE {
+                candidates[j * 16 + i] = rand::random();
+            }
+        }
 
-    let result = Arc::new(Mutex::new(Collision {
-        m0: [0; 16],
-        m1: [0; 16],
-        m0_prim: [0; 16],
-        m1_prim: [0; 16],
-        hash: [0; 4],
-    }));
+        let mut found: [u8; BATCH_SIZE] = [0; BATCH_SIZE];
 
-    for i in 0..NTHREADS {
-        let result = Arc::clone(&result);
-        let shoudl_stop = shoudl_stop.clone();
+        unsafe {
+            validate_candidates_cuda(
+                &state_m0[0],
+                &mut candidates[0],
+                &mut found[0],
+                BATCH_SIZE as usize,
+            );
+        }
 
-        children.push(thread::spawn(move || loop {
-            let candidate = random();
+        for i in 0..BATCH_SIZE {
+            if found[i] == 1 {
+                println!("Candidate: {:#?}", &candidates[i * 16..(i + 1) * 16]);
 
-            if let Some(candidate) = validate_candiate(&state_m0, candidate) {
-                print!(
-                    "[{:#?}] Candidate found by worker {} after {} iterations:\n[",
-                    start.elapsed(),
-                    i,
-                    count,
-                );
-                for i in 0..16 {
-                    if i != 15 {
-                        print!("{:#x}, ", candidate[i]);
-                    } else {
-                        print!("{:#x}]\n", candidate[i]);
-                    }
-                }
+                let candidate: [u32; 16] = candidates[i * 16..(i + 1) * 16]
+                    .iter()
+                    .map(|x| *x)
+                    .collect::<Vec<u32>>()
+                    .try_into()
+                    .unwrap();
 
                 let candidate_prim: [u32; 16] = candidate
                     .iter()
@@ -753,42 +748,18 @@ pub fn second_step(m0: [u32; 16], m0_prim: [u32; 16]) -> Collision {
                     .unwrap();
 
                 if hash(&state_m0, &candidate) == hash(&state_m0_prim, &candidate_prim) {
-                    println!(
-                        "[{:#?}] Collision found by worker {} after {} iterations",
-                        start.elapsed(),
-                        i,
-                        count
-                    );
-                    println!("[{:#?}] Closing all threads...", start.elapsed());
-                    let mut result = result.lock().unwrap();
-                    *result = Collision {
+                    println!("[{:#?}] Collision found", start.elapsed(),);
+                    return Collision {
                         m0,
                         m1: candidate,
                         m0_prim,
                         m1_prim: candidate_prim,
                         hash: state_m0,
                     };
-                    shoudl_stop.store(true, Ordering::Relaxed);
-                    break;
                 }
             }
-
-            count += 1;
-            if count % 100000000 == 0 {
-                if shoudl_stop.load(Ordering::Relaxed) {
-                    break;
-                }
-            }
-        }))
+        }
     }
-
-    for child in children {
-        child.join().unwrap();
-    }
-
-    let result = result.lock().unwrap();
-
-    return result.clone();
 }
 
 pub fn hash(state: &[u32; 4], input: &[u32]) -> [u32; 4] {
@@ -933,11 +904,17 @@ mod tests {
     }
 
     #[test]
-    fn validate_candiate_test() {
+    fn validate_candiate_test_1() {
         let m0 = [
             0x2dd31d1, 0xc4eee6c5, 0x69a3d69, 0x5cf9af98, 0x87b5ca2f, 0xab7e4612, 0x3e580440,
             0x897ffbb8, 0x634ad55, 0x2b3f409, 0x8388e483, 0x5a417125, 0xe8255108, 0x9fc9cdf7,
             0xf2bd1dd9, 0x5b3c3780,
+        ];
+
+        let m1 = [
+            0xd11d0b96, 0x9c7b41dc, 0xf497d8e4, 0xd555655a, 0xc79a7335, 0xcfdebf0, 0x66f12930,
+            0x8fb109d1, 0x797f2775, 0xeb5cd530, 0xbaade822, 0x5c15cc79, 0xddcb74ed, 0x6dd3c55f,
+            0xd80a9bb1, 0xe3a7cc35,
         ];
 
         let m0_prim = [
@@ -947,22 +924,16 @@ mod tests {
         ];
 
         let m1_prim = [
-            0x313e82d8, 0x5b8f3456, 0xd4ac6dae, 0xc619c936, 0x34e253dd, 0xfd03da87, 0x6633902,
-            0xa0cd48d2, 0x42339fe9, 0xe87e570f, 0x70b654ce, 0x1e0d2880, 0xbc2198c6, 0x9383a8b6,
-            0xab65f996, 0x702af76f,
-        ];
-
-        let m1 = [
-            0x313e82d8, 0x5b8f3456, 0xd4ac6dae, 0xc619c936, 0xb4e253dd, 0xfd03da87, 0x6633902,
-            0xa0cd48d2, 0x42339fe9, 0xe87e570f, 0x70b654ce, 0x1e0da880, 0xbc2198c6, 0x9383a8b6,
-            0x2b65f996, 0x702af76f,
+            0xd11d0b96, 0x9c7b41dc, 0xf497d8e4, 0xd555655a, 0x479a7335, 0xcfdebf0, 0x66f12930,
+            0x8fb109d1, 0x797f2775, 0xeb5cd530, 0xbaade822, 0x5c154c79, 0xddcb74ed, 0x6dd3c55f,
+            0x580a9bb1, 0xe3a7cc35,
         ];
 
         let state_m0 = hash(&INITIAL_STATE, &m0);
 
         let state_m0_prim = hash(&INITIAL_STATE, &m0_prim);
 
-        let modified_candidate = validate_candiate(&state_m0, m1).unwrap();
+        let modified_candidate = validate_candidate(&state_m0, m1).unwrap();
 
         assert_eq!(modified_candidate, m1);
 
@@ -977,5 +948,128 @@ mod tests {
         assert_eq!(candidate_prim, m1_prim);
 
         assert_eq!(hash(&state_m0, &m1), hash(&state_m0_prim, &candidate_prim));
+    }
+
+    #[test]
+    fn validate_candiate_test_2() {
+        let m0 = [
+            0x2dd31d1, 0xc4eee6c5, 0x69a3d69, 0x5cf9af98, 0x87b5ca2f, 0xab7e4612, 0x3e580440,
+            0x897ffbb8, 0x634ad55, 0x2b3f409, 0x8388e483, 0x5a417125, 0xe8255108, 0x9fc9cdf7,
+            0xf2bd1dd9, 0x5b3c3780,
+        ];
+
+        let m1 = [
+            0x313e82d8, 0x5b8f3456, 0xd4ac6dae, 0xc619c936, 0xb4e253dd, 0xfd03da87, 0x6633902,
+            0xa0cd48d2, 0x42339fe9, 0xe87e570f, 0x70b654ce, 0x1e0da880, 0xbc2198c6, 0x9383a8b6,
+            0x2b65f996, 0x702af76f,
+        ];
+
+        let m0_prim = [
+            0x2dd31d1, 0xc4eee6c5, 0x69a3d69, 0x5cf9af98, 0x7b5ca2f, 0xab7e4612, 0x3e580440,
+            0x897ffbb8, 0x634ad55, 0x2b3f409, 0x8388e483, 0x5a41f125, 0xe8255108, 0x9fc9cdf7,
+            0x72bd1dd9, 0x5b3c3780,
+        ];
+
+        let m1_prim = [
+            0x313e82d8, 0x5b8f3456, 0xd4ac6dae, 0xc619c936, 0x34e253dd, 0xfd03da87, 0x6633902,
+            0xa0cd48d2, 0x42339fe9, 0xe87e570f, 0x70b654ce, 0x1e0d2880, 0xbc2198c6, 0x9383a8b6,
+            0xab65f996, 0x702af76f,
+        ];
+
+        let state_m0 = hash(&INITIAL_STATE, &m0);
+
+        let state_m0_prim = hash(&INITIAL_STATE, &m0_prim);
+
+        let modified_candidate = validate_candidate(&state_m0, m1).unwrap();
+
+        assert_eq!(modified_candidate, m1);
+
+        let candidate_prim: [u32; 16] = m1
+            .iter()
+            .zip(M0_DELTA.iter())
+            .map(|(x, y)| x ^ y)
+            .collect::<Vec<u32>>()
+            .try_into()
+            .unwrap();
+
+        assert_eq!(candidate_prim, m1_prim);
+
+        assert_eq!(hash(&state_m0, &m1), hash(&state_m0_prim, &candidate_prim));
+    }
+
+    #[test]
+    fn validate_candidates_cuda_test_1() {
+        let m0 = [
+            0x2dd31d1, 0xc4eee6c5, 0x69a3d69, 0x5cf9af98, 0x87b5ca2f, 0xab7e4612, 0x3e580440,
+            0x897ffbb8, 0x634ad55, 0x2b3f409, 0x8388e483, 0x5a417125, 0xe8255108, 0x9fc9cdf7,
+            0xf2bd1dd9, 0x5b3c3780,
+        ];
+
+        let m1 = [
+            0xd11d0b96, 0x9c7b41dc, 0xf497d8e4, 0xd555655a, 0xc79a7335, 0xcfdebf0, 0x66f12930,
+            0x8fb109d1, 0x797f2775, 0xeb5cd530, 0xbaade822, 0x5c15cc79, 0xddcb74ed, 0x6dd3c55f,
+            0xd80a9bb1, 0xe3a7cc35,
+        ];
+
+        let state_m0 = hash(&INITIAL_STATE, &m0);
+
+        let mut candidates: [u32; 16 * 256] = [0; 16 * 256];
+
+        for i in 0..16 {
+            for j in 0..256 {
+                candidates[j * 16 + i] = m1[i];
+            }
+        }
+
+        let mut found: [u8; 256] = [0; 256];
+
+        unsafe {
+            validate_candidates_cuda(&state_m0[0], &mut candidates[0], &mut found[0], 256);
+        }
+
+        assert_eq!(m1, candidates[0..16]);
+
+        for i in 0..256 {
+            assert_eq!(found[i], 1);
+        }
+    }
+
+    #[test]
+    fn validate_candidates_cuda_test_2() {
+        let m0 = [
+            0x2dd31d1, 0xc4eee6c5, 0x69a3d69, 0x5cf9af98, 0x87b5ca2f, 0xab7e4612, 0x3e580440,
+            0x897ffbb8, 0x634ad55, 0x2b3f409, 0x8388e483, 0x5a417125, 0xe8255108, 0x9fc9cdf7,
+            0xf2bd1dd9, 0x5b3c3780,
+        ];
+
+        let m1 = [
+            2969470770, 2625319760, 4229390700, 3835123691, 412554573, 494957696, 2016467228,
+            2705954642, 3615180806, 3888527613, 2526940435, 651035831, 3180542171, 689163373,
+            553098378, 1381210726,
+        ];
+
+        let state_m0 = hash(&INITIAL_STATE, &m0);
+
+        let mut candidates: [u32; 16 * 256] = [0; 16 * 256];
+
+        for i in 0..16 {
+            for j in 0..256 {
+                candidates[j * 16 + i] = m1[i];
+            }
+        }
+
+        let mut found: [u8; 256] = [0; 256];
+
+        unsafe {
+            validate_candidates_cuda(&state_m0[0], &mut candidates[0], &mut found[0], 256);
+        }
+
+        assert_eq!(m1, candidates[0..16]);
+
+        for i in 0..256 {
+            assert_eq!(found[i], 1);
+        }
+
+        assert_ne!(None, validate_candidate(&state_m0, m1));
     }
 }
