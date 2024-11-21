@@ -1,6 +1,8 @@
 extern crate cc;
 
 fn main() {
+    println!("cargo::rerun-if-changed=kernel.cu");
+
     cc::Build::new()
         .cuda(true)
         .flag("-cudart=shared")
