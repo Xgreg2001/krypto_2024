@@ -1,7 +1,12 @@
-use num::bigint::BigInt;
+use num::bigint::{BigInt, ToBigInt};
 use num::traits::{One, Zero};
 use std::fmt;
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
+
+// TODO: special implementation for p = 2
+// TODO: fix exponentiation to ensure constant time operation
+// TODO: check with bigger numbers
+// TODO: remove comments
 
 /// Trait for FieldElements over some field.
 /// Now it is lifetime-parameterized to ensure elements don't outlive their context.
@@ -282,6 +287,12 @@ impl<'a> FpPolynomialElement<'a> {
         let mut el = Self { context, coeffs };
         el.normalize(k);
         el
+    }
+
+    pub fn from_vec(context: &'a FieldContext, coeffs: Vec<i64>) -> Self {
+        let big_int_coeffs: Vec<BigInt> = coeffs.iter().map(|c| c.to_bigint().unwrap()).collect();
+        let fp_coeffs = Self::poly_to_fp(context, &big_int_coeffs);
+        Self::new(context, fp_coeffs)
     }
 
     fn normalize(&mut self, k: usize) {
@@ -1033,5 +1044,74 @@ mod tests {
         let inv_rand = poly_rand.inverse();
         let check_inv = poly_rand * inv_rand;
         assert_eq!(check_inv, FpPolynomialElement::one(&ctx));
+    }
+
+    #[test]
+    fn test_mizoz_example() {
+        let p = 11.to_bigint().unwrap();
+        let irreducible_poly = vec![
+            1.to_bigint().unwrap(),
+            0.to_bigint().unwrap(),
+            5.to_bigint().unwrap(),
+            3.to_bigint().unwrap(),
+            1.to_bigint().unwrap(),
+            4.to_bigint().unwrap(),
+            4.to_bigint().unwrap(),
+            1.to_bigint().unwrap(),
+        ];
+        let ctx = FieldContext::new(p, irreducible_poly);
+
+        let p1 = FpPolynomialElement::from_vec(&ctx, vec![8, 6, 7, 7, 3, 9, 1]);
+        let p2 = FpPolynomialElement::from_vec(&ctx, vec![3, 7, 0, 3, 4, 2, 4]);
+
+        assert_eq!(
+            p1.clone() + p2.clone(),
+            FpPolynomialElement::from_vec(&ctx, vec![0, 2, 7, 10, 7, 0, 5])
+        );
+
+        assert_eq!(
+            -p1.clone(),
+            FpPolynomialElement::from_vec(&ctx, vec![3, 5, 4, 4, 8, 2, 10])
+        );
+
+        assert_eq!(
+            -p2.clone(),
+            FpPolynomialElement::from_vec(&ctx, vec![8, 4, 0, 8, 7, 9, 7])
+        );
+
+        assert_eq!(
+            p1.clone() - p2.clone(),
+            FpPolynomialElement::from_vec(&ctx, vec![5, 10, 7, 4, 10, 7, 8])
+        );
+
+        assert_eq!(
+            p2.clone() - p1.clone(),
+            FpPolynomialElement::from_vec(&ctx, vec![6, 1, 4, 7, 1, 4, 3])
+        );
+
+        assert_eq!(
+            p1.clone() * p2.clone(),
+            FpPolynomialElement::from_vec(&ctx, vec![4, 10, 10, 4, 10, 1, 3])
+        );
+
+        assert_eq!(
+            p1.clone().inverse(),
+            FpPolynomialElement::from_vec(&ctx, vec![0, 5, 8, 4, 1, 5, 2])
+        );
+
+        assert_eq!(
+            p2.clone().inverse(),
+            FpPolynomialElement::from_vec(&ctx, vec![10, 2, 2, 6, 2, 2, 10])
+        );
+
+        assert_eq!(
+            p1.clone() / p2.clone(),
+            FpPolynomialElement::from_vec(&ctx, vec![6, 2, 0, 3, 0, 0, 9])
+        );
+
+        assert_eq!(
+            p2 / p1,
+            FpPolynomialElement::from_vec(&ctx, vec![7, 2, 4, 2, 1, 1, 10])
+        );
     }
 }

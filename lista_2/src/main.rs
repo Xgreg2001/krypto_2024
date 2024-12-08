@@ -2,6 +2,8 @@ mod field;
 use field::{FieldContext, FieldElement, FpElement, FpPolynomialElement};
 use num::bigint::ToBigInt;
 
+// TODO: DIFFIE-HELLMAN
+
 fn main() {
     let p = 17.to_bigint().unwrap();
     let irreducible_poly = vec![
