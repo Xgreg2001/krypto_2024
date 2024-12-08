@@ -1,8 +1,12 @@
-mod field;
-use field::{FieldContext, FieldElement, FpElement, FpPolynomialElement};
+use diffie_hellman::field::fp::FpElement;
+use diffie_hellman::field::fp_poly::FpPolynomialElement;
+use diffie_hellman::{FieldContext, FieldElement};
 use num::bigint::ToBigInt;
 
 // TODO: DIFFIE-HELLMAN
+// TODO: special implementation for p = 2
+// TODO: fix exponentiation to ensure constant time operation
+// TODO: check with bigger numbers
 
 fn main() {
     let p = 17.to_bigint().unwrap();
