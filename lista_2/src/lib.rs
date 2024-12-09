@@ -30,17 +30,27 @@ pub trait FieldElement<'a>:
 pub struct FieldContext {
     pub p: BigInt,
     pub irreducible_poly: Vec<BigInt>,
+    pub irreducible_binary_poly: Vec<u64>,
 }
 
 impl FieldContext {
-    pub fn new(p: BigInt, irreducible_poly: Vec<BigInt>) -> Self {
+    pub fn new_poly(p: BigInt, irreducible_poly: Vec<BigInt>) -> Self {
         Self {
             p,
             irreducible_poly,
+            irreducible_binary_poly: vec![],
         }
     }
 
-    pub fn to_fp<'a>(&'a self, val: BigInt) -> FpElement<'a> {
+    pub fn new_binary(irreducible_binary_poly: Vec<u64>) -> Self {
+        Self {
+            p: BigInt::from(2),
+            irreducible_poly: vec![],
+            irreducible_binary_poly,
+        }
+    }
+
+    pub fn to_fp(&self, val: BigInt) -> FpElement<'_> {
         FpElement::new(self, val)
     }
 }

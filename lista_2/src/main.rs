@@ -15,7 +15,7 @@ fn main() {
         1.to_bigint().unwrap(),
         1.to_bigint().unwrap(),
     ];
-    let ctx = FieldContext::new(p, irreducible_poly);
+    let ctx = FieldContext::new_poly(p, irreducible_poly);
 
     println!("Field context: {:?}", ctx);
 

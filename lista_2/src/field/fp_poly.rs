@@ -12,7 +12,7 @@ pub struct FpPolynomialElement<'a> {
     coeffs: Vec<FpElement<'a>>,
 }
 
-impl<'a> fmt::Display for FpPolynomialElement<'a> {
+impl fmt::Display for FpPolynomialElement<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut has_printed_term = false;
         let degree = self.coeffs.len().saturating_sub(1);
@@ -80,17 +80,10 @@ impl<'a> FpPolynomialElement<'a> {
     ) -> Vec<FpElement<'a>> {
         let len = a.len().max(b.len());
         let mut res = Vec::with_capacity(len);
+        let zero = FpElement::zero(ctx);
         for i in 0..len {
-            let av = if i < a.len() {
-                &a[i]
-            } else {
-                &FpElement::zero(ctx)
-            };
-            let bv = if i < b.len() {
-                &b[i]
-            } else {
-                &FpElement::zero(ctx)
-            };
+            let av = if i < a.len() { &a[i] } else { &zero };
+            let bv = if i < b.len() { &b[i] } else { &zero };
             res.push(av + bv);
         }
         res
@@ -103,17 +96,10 @@ impl<'a> FpPolynomialElement<'a> {
     ) -> Vec<FpElement<'a>> {
         let len = a.len().max(b.len());
         let mut res = Vec::with_capacity(len);
+        let zero = FpElement::zero(ctx);
         for i in 0..len {
-            let av = if i < a.len() {
-                &a[i]
-            } else {
-                &FpElement::zero(ctx)
-            };
-            let bv = if i < b.len() {
-                &b[i]
-            } else {
-                &FpElement::zero(ctx)
-            };
+            let av = if i < a.len() { &a[i] } else { &zero };
+            let bv = if i < b.len() { &b[i] } else { &zero };
             res.push(av - bv);
         }
         res
@@ -231,7 +217,7 @@ impl<'a> FpPolynomialElement<'a> {
         }
 
         let inv_lead = r0.last().unwrap().inverse();
-        let inv = Self::poly_mul(ctx, &t0, &vec![inv_lead]);
+        let inv = Self::poly_mul(ctx, &t0, &[inv_lead]);
         Self::poly_mod(&inv, ctx)
     }
 }
@@ -243,7 +229,7 @@ impl<'a> Index<usize> for FpPolynomialElement<'a> {
     }
 }
 
-impl<'a> IndexMut<usize> for FpPolynomialElement<'a> {
+impl IndexMut<usize> for FpPolynomialElement<'_> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.coeffs[index]
     }
@@ -385,7 +371,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
         // poly_a = 2+3x, poly_b=5+x
         let poly_a = FpPolynomialElement::new(
             &ctx,
@@ -417,7 +403,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
         let poly_a = FpPolynomialElement::new(
             &ctx,
             vec![
@@ -448,7 +434,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
         let poly_a = FpPolynomialElement::new(
             &ctx,
             vec![
@@ -485,7 +471,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
         let poly_a = FpPolynomialElement::new(
             &ctx,
             vec![
@@ -511,7 +497,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
         let poly_b = FpPolynomialElement::new(
             &ctx,
             vec![
@@ -535,7 +521,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
         let poly_a = FpPolynomialElement::new(
             &ctx,
             vec![
@@ -565,7 +551,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
         let poly_a = FpPolynomialElement::new(
             &ctx,
             vec![
@@ -607,7 +593,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         // poly = 0
         let zero_poly = FpPolynomialElement::zero(&ctx);
@@ -640,7 +626,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         // Another polynomial
         let poly_x_only = FpPolynomialElement::new(
@@ -682,7 +668,7 @@ mod tests {
             4.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let p1 = FpPolynomialElement::from_vec(&ctx, vec![8, 6, 7, 7, 3, 9, 1]);
         let p2 = FpPolynomialElement::from_vec(&ctx, vec![3, 7, 0, 3, 4, 2, 4]);

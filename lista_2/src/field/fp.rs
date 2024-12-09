@@ -12,7 +12,7 @@ pub struct FpElement<'a> {
     pub val: BigInt,
 }
 
-impl<'a> fmt::Display for FpElement<'a> {
+impl fmt::Display for FpElement<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Just display the value field
         write!(f, "{}", self.val)
@@ -160,7 +160,7 @@ impl<'a> FieldElement<'a> for FpElement<'a> {
     fn inverse(&self) -> Self {
         let a = &self.val;
         let m = &self.context.p;
-        let (g, x, _) = Self::extended_gcd(&a, &m);
+        let (g, x, _) = Self::extended_gcd(a, m);
         if g != BigInt::one() {
             panic!("No inverse exists!");
         }
@@ -174,7 +174,7 @@ impl<'a> FieldElement<'a> for FpElement<'a> {
         let mut e_val = exp;
         while e_val > 0 {
             if (e_val & 1) == 1 {
-                result = result * &base;
+                result *= &base;
             }
             base = &base * &base;
             e_val >>= 1;
@@ -196,7 +196,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -219,7 +219,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -239,7 +239,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -261,7 +261,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         assert_eq!((-a).val, 15.to_bigint().unwrap()); // since 17-2=15
@@ -277,7 +277,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let a = FpElement::new(&ctx, 3.to_bigint().unwrap());
         let inv_a = a.inverse();
@@ -297,7 +297,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -315,7 +315,7 @@ mod tests {
             1.to_bigint().unwrap(),
             1.to_bigint().unwrap(),
         ];
-        let ctx = FieldContext::new(p, irreducible_poly);
+        let ctx = FieldContext::new_poly(p, irreducible_poly);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         // a^5 = 32 mod17=15
