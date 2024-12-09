@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use crate::{FieldContext, FieldElement};
+use crate::{get_binary_poly_degree, FieldContext, FieldElement};
 
 /// Represents a polynomial over a finite field F2.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -11,15 +11,21 @@ pub struct F2PolynomialElement<'a> {
 
 impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {
     fn zero(ctx: &'a FieldContext) -> Self {
-        todo!()
+        return F2PolynomialElement {
+            context: ctx,
+            coeffs: vec![0],
+        };
     }
 
     fn one(ctx: &'a FieldContext) -> Self {
-        todo!()
+        return F2PolynomialElement {
+            context: ctx,
+            coeffs: vec![1],
+        };
     }
 
     fn is_zero(&self) -> bool {
-        todo!()
+        return self.coeffs.iter().all(|&c| c == 0);
     }
 
     fn inverse(&self) -> Self {
@@ -33,6 +39,56 @@ impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {
 
 impl<'a> F2PolynomialElement<'a> {
     pub fn new(ctx: &'a FieldContext, coeffs: Vec<u64>) -> Self {
+        assert!(ctx.is_binary());
+        return F2PolynomialElement {
+            context: ctx,
+            coeffs: coeffs,
+        };
+    }
+
+    fn poly_add(a: &[u64], b: &[u64]) -> Vec<u64> {
+        let len = a.len().max(b.len());
+        let mut res = Vec::with_capacity(len);
+        for i in 0..len {
+            let av = if i < a.len() { a[i] } else { 0 };
+            let bv = if i < b.len() { b[i] } else { 0 };
+            res.push(av ^ bv);
+        }
+        res
+    }
+
+    fn poly_mod(ctx: &FieldContext, a: &[u64]) -> Vec<u64> {
+        let mut remainder = a.to_vec();
+        let divisor = &ctx.irreducible_binary_poly;
+        let divisor_degree = get_binary_poly_degree(divisor);
+
+        loop {
+            let remainder_degree = get_binary_poly_degree(&remainder);
+
+            if remainder_degree < divisor_degree {
+                break;
+            }
+
+            let shift = remainder_degree - divisor_degree;
+
+            for i in 0..divisor.len() {
+                if i + shift / 64 < remainder.len() {
+                    remainder[i + shift / 64] ^= divisor[i] << (shift % 64);
+                    if shift % 64 > 0 && i + shift / 64 + 1 < remainder.len() {
+                        remainder[i + shift / 64 + 1] ^= divisor[i] >> (64 - shift % 64);
+                    }
+                }
+            }
+        }
+
+        while remainder.last() == Some(&0) {
+            remainder.pop();
+        }
+
+        remainder
+    }
+
+    fn normalize(&mut self, k: usize) {
         todo!()
     }
 }
@@ -41,7 +97,15 @@ impl<'a> Add for F2PolynomialElement<'a> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        todo!()
+        let ctx = self.context;
+        let added = Self::poly_add(&self.coeffs, &rhs.coeffs);
+        // let k = ctx.get_irreducible_poly_degree();
+        let res = F2PolynomialElement {
+            context: ctx,
+            coeffs: Self::poly_mod(ctx, &added),
+        };
+        // res.normalize(k);
+        res
     }
 }
 

@@ -1,6 +1,6 @@
 pub mod field;
 
-use field::fp::FpElement;
+use field::{f2_poly::F2PolynomialElement, fp::FpElement};
 use num::bigint::BigInt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -50,7 +50,33 @@ impl FieldContext {
         }
     }
 
+    pub fn is_binary(&self) -> bool {
+        self.irreducible_binary_poly.len() > 0
+    }
+
     pub fn to_fp(&self, val: BigInt) -> FpElement<'_> {
         FpElement::new(self, val)
     }
+
+    pub fn is_poly(&self) -> bool {
+        self.irreducible_poly.len() > 0
+    }
+
+    fn get_irreducible_poly_degree(&self) -> usize {
+        if self.is_binary() {
+            get_binary_poly_degree(&self.irreducible_binary_poly)
+        } else {
+            return self.irreducible_poly.len() - 1;
+        }
+    }
+}
+
+pub fn get_binary_poly_degree(a: &Vec<u64>) -> usize {
+    let mut degree = 0;
+    for (i, &val) in a.iter().enumerate() {
+        if val != 0 {
+            degree = i * 64 + 63 - val.leading_zeros() as usize;
+        }
+    }
+    degree
 }

@@ -49,9 +49,16 @@ impl fmt::Display for FpPolynomialElement<'_> {
 }
 
 impl<'a> FpPolynomialElement<'a> {
-    pub fn new(context: &'a FieldContext, coeffs: Vec<FpElement<'a>>) -> Self {
-        let k = context.irreducible_poly.len() - 1;
-        let mut el = Self { context, coeffs };
+    pub fn new(ctx: &'a FieldContext, coeffs: Vec<FpElement<'a>>) -> Self {
+        if !ctx.is_poly() {
+            panic!("Field context is not a polynomial field");
+        }
+
+        let k = ctx.get_irreducible_poly_degree();
+        let mut el = Self {
+            context: ctx,
+            coeffs,
+        };
         el.normalize(k);
         el
     }
@@ -122,7 +129,7 @@ impl<'a> FpPolynomialElement<'a> {
 
     fn poly_mod(a: &[FpElement<'a>], ctx: &'a FieldContext) -> Vec<FpElement<'a>> {
         let irreducible_poly = Self::poly_to_fp(ctx, &ctx.irreducible_poly);
-        let deg_mod = irreducible_poly.len() - 1;
+        let deg_mod = ctx.get_irreducible_poly_degree();
         let mut r = a.to_vec();
         while r.len() > deg_mod {
             let leading = &r[r.len() - 1];
@@ -240,7 +247,7 @@ impl<'a> Add for FpPolynomialElement<'a> {
     fn add(self, other: FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
         let ctx = self.context;
         let added = Self::poly_add(ctx, &self.coeffs, &other.coeffs);
-        let k = ctx.irreducible_poly.len() - 1;
+        let k = ctx.get_irreducible_poly_degree();
         let mut res = FpPolynomialElement {
             context: ctx,
             coeffs: added,
@@ -256,7 +263,7 @@ impl<'a> Sub for FpPolynomialElement<'a> {
     fn sub(self, other: FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
         let ctx = self.context;
         let subbed = Self::poly_sub(ctx, &self.coeffs, &other.coeffs);
-        let k = ctx.irreducible_poly.len() - 1;
+        let k = ctx.get_irreducible_poly_degree();
         let mut res = FpPolynomialElement {
             context: ctx,
             coeffs: subbed,
@@ -272,7 +279,7 @@ impl<'a> Neg for FpPolynomialElement<'a> {
     fn neg(self) -> FpPolynomialElement<'a> {
         let ctx = self.context;
         let negcoeffs: Vec<FpElement<'a>> = self.coeffs.into_iter().map(|c| c.neg()).collect();
-        let k = ctx.irreducible_poly.len() - 1;
+        let k = ctx.get_irreducible_poly_degree();
         let mut res = FpPolynomialElement {
             context: ctx,
             coeffs: negcoeffs,
@@ -286,7 +293,7 @@ impl<'a> Mul for FpPolynomialElement<'a> {
     type Output = FpPolynomialElement<'a>;
     fn mul(self, other: FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
         let ctx = self.context;
-        let k = ctx.irreducible_poly.len() - 1;
+        let k = ctx.get_irreducible_poly_degree();
         let mut prod = Self::poly_mul(ctx, &self.coeffs, &other.coeffs);
         prod = Self::poly_mod(&prod, ctx);
         let mut res = FpPolynomialElement {
@@ -307,7 +314,7 @@ impl<'a> Div for FpPolynomialElement<'a> {
 
 impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
     fn zero(ctx: &'a FieldContext) -> Self {
-        let k = ctx.irreducible_poly.len() - 1;
+        let k = ctx.get_irreducible_poly_degree();
         let coeffs = vec![FpElement::zero(ctx); k];
         FpPolynomialElement {
             context: ctx,
@@ -316,7 +323,7 @@ impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
     }
 
     fn one(ctx: &'a FieldContext) -> Self {
-        let k = ctx.irreducible_poly.len() - 1;
+        let k = ctx.get_irreducible_poly_degree();
         let mut coeffs = vec![FpElement::zero(ctx); k];
         coeffs[0] = FpElement::one(ctx);
         FpPolynomialElement {
@@ -332,7 +339,7 @@ impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
     fn inverse(&self) -> Self {
         let ctx = self.context;
         let inv_poly = Self::poly_inv(&self.coeffs, ctx);
-        let k = ctx.irreducible_poly.len() - 1;
+        let k = ctx.get_irreducible_poly_degree();
         let mut res = FpPolynomialElement {
             context: ctx,
             coeffs: inv_poly,
