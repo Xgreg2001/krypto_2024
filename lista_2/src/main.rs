@@ -1,3 +1,4 @@
+use diffie_hellman::field::f2_poly::F2PolynomialElement;
 use diffie_hellman::field::fp::FpElement;
 use diffie_hellman::field::fp_poly::FpPolynomialElement;
 use diffie_hellman::{FieldContext, FieldElement};
@@ -67,4 +68,17 @@ fn main() {
 
     let poly_exp = poly_a.pow(5);
     println!("F_{{p^2}}: a^5 = {}", poly_exp);
+
+    let irreducible_bin_poly = vec![0b11111101111101001];
+    let bin_ctx = FieldContext::new_binary(irreducible_bin_poly.clone());
+
+    let poly_a = F2PolynomialElement::new(&bin_ctx, vec![0b1000101000011101]);
+    let poly_b = F2PolynomialElement::new(&bin_ctx, vec![0b1010011011000101]);
+
+    println!(
+        "irreducible_bin_poly: {}",
+        F2PolynomialElement::new(&bin_ctx, irreducible_bin_poly)
+    );
+
+    println!("a = {}, b = {}", poly_a, poly_b);
 }

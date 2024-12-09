@@ -72,11 +72,11 @@ impl FieldContext {
 }
 
 pub fn get_binary_poly_degree(a: &Vec<u64>) -> usize {
-    let mut degree = 0;
-    for (i, &val) in a.iter().enumerate() {
-        if val != 0 {
-            degree = i * 64 + 63 - val.leading_zeros() as usize;
-        }
-    }
-    degree
+    let full_chunks = a.len() - 1;
+    let last_chunk = a[0];
+    const CHUNK_SIZE: usize = 64;
+
+    let leftmost_bit = CHUNK_SIZE - last_chunk.leading_zeros() as usize;
+
+    full_chunks * CHUNK_SIZE + leftmost_bit
 }
