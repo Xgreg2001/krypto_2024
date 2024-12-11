@@ -258,6 +258,22 @@ impl<'a> Add for FpPolynomialElement<'a> {
     }
 }
 
+impl<'a> Add for &FpPolynomialElement<'a> {
+    type Output = FpPolynomialElement<'a>;
+    fn add(self, other: &FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
+        let ctx = self.context;
+        let added = FpPolynomialElement::poly_add(ctx, &self.coeffs, &other.coeffs);
+        let k = ctx.get_irreducible_poly_degree();
+        let mut res = FpPolynomialElement {
+            context: ctx,
+            coeffs: added,
+        };
+        res.coeffs = FpPolynomialElement::poly_mod(&res.coeffs, ctx);
+        res.normalize(k);
+        res
+    }
+}
+
 impl<'a> Sub for FpPolynomialElement<'a> {
     type Output = FpPolynomialElement<'a>;
     fn sub(self, other: FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
@@ -274,11 +290,42 @@ impl<'a> Sub for FpPolynomialElement<'a> {
     }
 }
 
+impl<'a> Sub for &FpPolynomialElement<'a> {
+    type Output = FpPolynomialElement<'a>;
+    fn sub(self, other: &FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
+        let ctx = self.context;
+        let subbed = FpPolynomialElement::poly_sub(ctx, &self.coeffs, &other.coeffs);
+        let k = ctx.get_irreducible_poly_degree();
+        let mut res = FpPolynomialElement {
+            context: ctx,
+            coeffs: subbed,
+        };
+        res.coeffs = FpPolynomialElement::poly_mod(&res.coeffs, ctx);
+        res.normalize(k);
+        res
+    }
+}
+
 impl<'a> Neg for FpPolynomialElement<'a> {
     type Output = FpPolynomialElement<'a>;
     fn neg(self) -> FpPolynomialElement<'a> {
         let ctx = self.context;
         let negcoeffs: Vec<FpElement<'a>> = self.coeffs.into_iter().map(|c| c.neg()).collect();
+        let k = ctx.get_irreducible_poly_degree();
+        let mut res = FpPolynomialElement {
+            context: ctx,
+            coeffs: negcoeffs,
+        };
+        res.normalize(k);
+        res
+    }
+}
+
+impl<'a> Neg for &FpPolynomialElement<'a> {
+    type Output = FpPolynomialElement<'a>;
+    fn neg(self) -> FpPolynomialElement<'a> {
+        let ctx = self.context;
+        let negcoeffs: Vec<FpElement<'a>> = self.coeffs.iter().map(|c| c.neg()).collect();
         let k = ctx.get_irreducible_poly_degree();
         let mut res = FpPolynomialElement {
             context: ctx,
@@ -305,10 +352,33 @@ impl<'a> Mul for FpPolynomialElement<'a> {
     }
 }
 
+impl<'a> Mul for &FpPolynomialElement<'a> {
+    type Output = FpPolynomialElement<'a>;
+    fn mul(self, other: &FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
+        let ctx = self.context;
+        let k = ctx.get_irreducible_poly_degree();
+        let mut prod = FpPolynomialElement::poly_mul(ctx, &self.coeffs, &other.coeffs);
+        prod = FpPolynomialElement::poly_mod(&prod, ctx);
+        let mut res = FpPolynomialElement {
+            context: ctx,
+            coeffs: prod,
+        };
+        res.normalize(k);
+        res
+    }
+}
+
 impl<'a> Div for FpPolynomialElement<'a> {
     type Output = FpPolynomialElement<'a>;
     fn div(self, other: FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
         self * other.inverse()
+    }
+}
+
+impl<'a> Div for &FpPolynomialElement<'a> {
+    type Output = FpPolynomialElement<'a>;
+    fn div(self, other: &FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
+        self * &FpPolynomialElement::inverse(other)
     }
 }
 
@@ -397,7 +467,7 @@ mod tests {
         );
 
         // a+b = (2+5)+(3+1)x=7+4x
-        let sum = poly_a.clone() + poly_b.clone();
+        let sum = &poly_a + &poly_b;
         assert_eq!(sum[0].val, 7.to_bigint().unwrap());
         assert_eq!(sum[1].val, 4.to_bigint().unwrap());
     }
@@ -428,7 +498,7 @@ mod tests {
         );
 
         // b-a = (5-2) + (1-3)x = 3 + (-2)x =3+15x mod17
-        let diff = poly_b.clone() - poly_a.clone();
+        let diff = &poly_b - &poly_a;
         assert_eq!(diff[0].val, 3.to_bigint().unwrap());
         assert_eq!(diff[1].val, 15.to_bigint().unwrap());
     }
@@ -458,14 +528,14 @@ mod tests {
             ],
         );
 
-        let prod = poly_a.clone() * poly_b.clone();
+        let prod = &poly_a * &poly_b;
         // Expected result from previous reasoning: 7 + 0*x
         assert_eq!(prod[0].val, 1.to_bigint().unwrap());
         assert_eq!(prod[1].val, 14.to_bigint().unwrap());
 
         // Check multiplication by zero polynomial
         let zero_poly = FpPolynomialElement::zero(&ctx);
-        let zero_prod = poly_a.clone() * zero_poly.clone();
+        let zero_prod = &poly_a * &zero_poly;
         // should be zero polynomial:
         assert!(zero_prod.is_zero());
     }
@@ -487,13 +557,13 @@ mod tests {
             ],
         );
 
-        let neg_a = -poly_a.clone();
+        let neg_a = -&poly_a;
         // -2 mod17=15, -3mod17=14
         assert_eq!(neg_a[0].val, 15.to_bigint().unwrap());
         assert_eq!(neg_a[1].val, 14.to_bigint().unwrap());
 
         let zero_poly = FpPolynomialElement::zero(&ctx);
-        assert!((-zero_poly.clone()).is_zero());
+        assert!((-&zero_poly).is_zero());
     }
 
     #[test]
@@ -516,7 +586,7 @@ mod tests {
         let inv_b = poly_b.inverse();
         // poly_b * inv_b = 1
         let one = FpPolynomialElement::one(&ctx);
-        let check_inv = poly_b.clone() * inv_b.clone();
+        let check_inv = &poly_b * &inv_b;
         assert_eq!(check_inv, one);
     }
 
@@ -545,8 +615,8 @@ mod tests {
             ],
         );
 
-        let quotient = poly_a.clone() / poly_b.clone();
-        let check_div = quotient * poly_b.clone();
+        let quotient = &poly_a / &poly_b;
+        let check_div = &quotient * &poly_b;
         assert_eq!(check_div, poly_a);
     }
 
@@ -644,7 +714,7 @@ mod tests {
             ],
         ); // x
            // x*x = x^2 = -1 mod poly => = p-1=16
-        let prod = poly_x_only.clone() * poly_x_only.clone();
+        let prod = &poly_x_only * &poly_x_only;
         assert_eq!(prod[0].val, 14.to_bigint().unwrap());
         assert_eq!(prod[1].val, 16.to_bigint().unwrap());
 
@@ -681,47 +751,47 @@ mod tests {
         let p2 = FpPolynomialElement::from_vec(&ctx, vec![3, 7, 0, 3, 4, 2, 4]);
 
         assert_eq!(
-            p1.clone() + p2.clone(),
+            &p1 + &p2,
             FpPolynomialElement::from_vec(&ctx, vec![0, 2, 7, 10, 7, 0, 5])
         );
 
         assert_eq!(
-            -p1.clone(),
+            -&p1,
             FpPolynomialElement::from_vec(&ctx, vec![3, 5, 4, 4, 8, 2, 10])
         );
 
         assert_eq!(
-            -p2.clone(),
+            -&p2,
             FpPolynomialElement::from_vec(&ctx, vec![8, 4, 0, 8, 7, 9, 7])
         );
 
         assert_eq!(
-            p1.clone() - p2.clone(),
+            &p1 - &p2,
             FpPolynomialElement::from_vec(&ctx, vec![5, 10, 7, 4, 10, 7, 8])
         );
 
         assert_eq!(
-            p2.clone() - p1.clone(),
+            &p2 - &p1,
             FpPolynomialElement::from_vec(&ctx, vec![6, 1, 4, 7, 1, 4, 3])
         );
 
         assert_eq!(
-            p1.clone() * p2.clone(),
+            &p1 * &p2,
             FpPolynomialElement::from_vec(&ctx, vec![4, 10, 10, 4, 10, 1, 3])
         );
 
         assert_eq!(
-            p1.clone().inverse(),
+            p1.inverse(),
             FpPolynomialElement::from_vec(&ctx, vec![0, 5, 8, 4, 1, 5, 2])
         );
 
         assert_eq!(
-            p2.clone().inverse(),
+            p2.inverse(),
             FpPolynomialElement::from_vec(&ctx, vec![10, 2, 2, 6, 2, 2, 10])
         );
 
         assert_eq!(
-            p1.clone() / p2.clone(),
+            &p1 / &p2,
             FpPolynomialElement::from_vec(&ctx, vec![6, 2, 0, 3, 0, 0, 9])
         );
 

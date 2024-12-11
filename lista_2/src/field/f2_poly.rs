@@ -222,8 +222,30 @@ impl<'a> Add for F2PolynomialElement<'a> {
     }
 }
 
+impl<'a> Add for &F2PolynomialElement<'a> {
+    type Output = F2PolynomialElement<'a>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let ctx = self.context;
+        let added = F2PolynomialElement::poly_add(&self.coeffs, &rhs.coeffs);
+        let res = F2PolynomialElement {
+            context: ctx,
+            coeffs: F2PolynomialElement::poly_mod(ctx, &added),
+        };
+        res
+    }
+}
+
 impl<'a> Sub for F2PolynomialElement<'a> {
     type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        return self + rhs;
+    }
+}
+
+impl<'a> Sub for &F2PolynomialElement<'a> {
+    type Output = F2PolynomialElement<'a>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         return self + rhs;
@@ -235,6 +257,14 @@ impl<'a> Neg for F2PolynomialElement<'a> {
 
     fn neg(self) -> Self::Output {
         return self;
+    }
+}
+
+impl<'a> Neg for &F2PolynomialElement<'a> {
+    type Output = F2PolynomialElement<'a>;
+
+    fn neg(self) -> Self::Output {
+        return self.clone();
     }
 }
 
@@ -252,11 +282,33 @@ impl<'a> Mul for F2PolynomialElement<'a> {
     }
 }
 
+impl<'a> Mul for &F2PolynomialElement<'a> {
+    type Output = F2PolynomialElement<'a>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let ctx = self.context;
+        let mult = F2PolynomialElement::poly_mul(&self.coeffs, &rhs.coeffs);
+        let res = F2PolynomialElement {
+            context: ctx,
+            coeffs: F2PolynomialElement::poly_mod(ctx, &mult),
+        };
+        res
+    }
+}
+
 impl<'a> Div for F2PolynomialElement<'a> {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self::Output {
         return self * rhs.inverse();
+    }
+}
+
+impl<'a> Div for &F2PolynomialElement<'a> {
+    type Output = F2PolynomialElement<'a>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        return self * &F2PolynomialElement::inverse(rhs);
     }
 }
 
@@ -287,7 +339,7 @@ mod tests {
         let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
         let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
-        let diff_a_b = poly_a.clone() - poly_b.clone();
+        let diff_a_b = &poly_a - &poly_b;
         let diff_b_a = poly_b - poly_a;
         assert_eq!(
             diff_a_b,
@@ -346,8 +398,8 @@ mod tests {
         let inv_a = poly_a.inverse();
         let inv_b = poly_b.inverse();
 
-        assert_eq!(inv_a.clone() * poly_a, F2PolynomialElement::one(&ctx));
-        assert_eq!(inv_b.clone() * poly_b, F2PolynomialElement::one(&ctx));
+        assert_eq!(&inv_a * &poly_a, F2PolynomialElement::one(&ctx));
+        assert_eq!(&inv_b * &poly_b, F2PolynomialElement::one(&ctx));
 
         assert_eq!(
             inv_a,
@@ -468,7 +520,7 @@ mod tests {
         let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
         let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
-        let div_a_b = poly_a.clone() / poly_b.clone();
+        let div_a_b = &poly_a / &poly_b;
         let div_b_a = poly_b / poly_a;
 
         assert_eq!(
@@ -514,11 +566,11 @@ mod tests {
 
         assert_eq!(
             exp_a,
-            poly_a.clone() * poly_a.clone() * poly_a.clone() * poly_a.clone() * poly_a
+            &(&(&(&poly_a * &poly_a) * &poly_a) * &poly_a) * &poly_a
         );
         assert_eq!(
             exp_b,
-            poly_b.clone() * poly_b.clone() * poly_b.clone() * poly_b.clone() * poly_b
+            &(&(&(&poly_b * &poly_b) * &poly_b) * &poly_b) * &poly_b
         );
     }
 

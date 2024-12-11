@@ -1,6 +1,6 @@
 pub mod field;
 
-use field::{f2_poly::F2PolynomialElement, fp::FpElement};
+use field::fp::FpElement;
 use num::{bigint::BigInt, BigUint, Zero};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
