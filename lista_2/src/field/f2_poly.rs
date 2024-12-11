@@ -3,7 +3,7 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
-use num::Zero;
+use num::{BigUint, One, Zero};
 
 use crate::{get_binary_poly_degree, FieldContext, FieldElement};
 
@@ -11,26 +11,26 @@ use crate::{get_binary_poly_degree, FieldContext, FieldElement};
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct F2PolynomialElement<'a> {
     context: &'a FieldContext,
-    coeffs: Vec<u64>,
+    coeffs: BigUint,
 }
 
 impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {
     fn zero(ctx: &'a FieldContext) -> Self {
         return F2PolynomialElement {
             context: ctx,
-            coeffs: vec![0],
+            coeffs: BigUint::zero(),
         };
     }
 
     fn one(ctx: &'a FieldContext) -> Self {
         return F2PolynomialElement {
             context: ctx,
-            coeffs: vec![1],
+            coeffs: BigUint::one(),
         };
     }
 
     fn is_zero(&self) -> bool {
-        return self.coeffs.iter().all(|&c| c == 0);
+        return self.coeffs.is_zero();
     }
 
     fn inverse(&self) -> Self {
@@ -63,57 +63,21 @@ impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {
 impl<'a> Display for F2PolynomialElement<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut has_printed_term = false;
-        let mut degree = get_binary_poly_degree(&self.coeffs) - 1;
-        let mut first_chunk = true;
+        let degree = get_binary_poly_degree(&self.coeffs);
 
-        for &chunk in self.coeffs.iter() {
-            if first_chunk {
-                first_chunk = false;
-                let leftmost_bit = 64 - chunk.leading_zeros();
-
-                for i in (0..leftmost_bit).rev() {
-                    if (chunk >> i) & 1 == 1 {
-                        if has_printed_term {
-                            write!(f, " + ")?;
-                        }
-                        if degree == 0 {
-                            write!(f, "1")?;
-                        } else if degree == 1 {
-                            write!(f, "x")?;
-                        } else {
-                            write!(f, "x^{}", degree)?;
-                        }
-                        has_printed_term = true;
-                    }
-
-                    if degree == 0 {
-                        break;
-                    }
-
-                    degree -= 1;
+        for i in (0..=degree).rev() {
+            if (&self.coeffs >> i) & BigUint::one() == BigUint::one() {
+                if has_printed_term {
+                    write!(f, " + ")?;
                 }
-            } else {
-                for i in (0..64).rev() {
-                    if (chunk >> i) & 1 == 1 {
-                        if has_printed_term {
-                            write!(f, " + ")?;
-                        }
-                        if degree == 0 {
-                            write!(f, "1")?;
-                        } else if degree == 1 {
-                            write!(f, "x")?;
-                        } else {
-                            write!(f, "x^{}", degree)?;
-                        }
-                        has_printed_term = true;
-                    }
-
-                    if degree == 0 {
-                        break;
-                    }
-
-                    degree -= 1;
+                if i == 0 {
+                    write!(f, "1")?;
+                } else if i == 1 {
+                    write!(f, "x")?;
+                } else {
+                    write!(f, "x^{}", i)?;
                 }
+                has_printed_term = true;
             }
         }
 
@@ -126,7 +90,7 @@ impl<'a> Display for F2PolynomialElement<'a> {
 }
 
 impl<'a> F2PolynomialElement<'a> {
-    pub fn new(ctx: &'a FieldContext, coeffs: Vec<u64>) -> Self {
+    pub fn new(ctx: &'a FieldContext, coeffs: BigUint) -> Self {
         assert!(ctx.is_binary());
         return F2PolynomialElement {
             context: ctx,
@@ -134,151 +98,112 @@ impl<'a> F2PolynomialElement<'a> {
         };
     }
 
-    fn poly_add(a: &[u64], b: &[u64]) -> Vec<u64> {
-        let max_len = a.len().max(b.len());
-        let mut result = vec![0u64; max_len];
-
-        for i in 0..max_len {
-            result[i] = if i < a.len() { a[i] } else { 0 } ^ if i < b.len() { b[i] } else { 0 };
-        }
-
-        while result.last() == Some(&0) {
-            result.pop();
-        }
-
-        result
+    fn poly_add(a: &BigUint, b: &BigUint) -> BigUint {
+        return a ^ b;
     }
 
-    fn poly_extended_gcd(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-        let mut r0 = a.to_vec();
-        let mut r1 = b.to_vec();
-        let mut u0 = vec![1u64];
-        let mut u1 = vec![0u64];
-        let mut v0 = vec![0u64];
-        let mut v1 = vec![1u64];
+    fn poly_extended_gcd(a: &BigUint, b: &BigUint) -> (BigUint, BigUint, BigUint) {
+        if b.is_zero() {
+            return (a.clone(), BigUint::one(), BigUint::zero());
+        }
 
-        while !r1.is_empty() {
-            let q = Self::poly_div(&r0, &r1).0; // Quotient of r0 / r1
-                                                // addition and subtraction are the same operations
-            let new_r = Self::poly_add(&r0, &Self::poly_mul(&q, &r1));
-            let new_u = Self::poly_add(&u0, &Self::poly_mul(&q, &u1));
-            let new_v = Self::poly_add(&v0, &Self::poly_mul(&q, &v1));
+        let mut r0 = a.clone();
+        let mut r1 = b.clone();
+        let mut u0 = BigUint::one();
+        let mut u1 = BigUint::zero();
+        let mut v0 = BigUint::zero();
+        let mut v1 = BigUint::one();
+
+        while !r1.is_zero() {
+            let (q, r) = Self::poly_div(&r0, &r1);
 
             r0 = r1;
-            r1 = new_r;
-            u0 = u1;
-            u1 = new_u;
-            v0 = v1;
-            v1 = new_v;
+            r1 = r;
+
+            let u_temp = u1.clone();
+            u1 = &u0 ^ &(Self::poly_mul(&q, &u1));
+            u0 = u_temp;
+
+            let v_temp = v1.clone();
+            v1 = &v0 ^ &(Self::poly_mul(&q, &v1));
+            v0 = v_temp;
         }
 
         (r0, u0, v0)
     }
 
-    fn poly_div(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>) {
-        let mut quotient = vec![0u64; a.len()];
-        let mut remainder = a.to_vec();
-        let divisor_degree = get_binary_poly_degree(&b.to_vec());
-        let divisor = b;
+    fn poly_div(a: &BigUint, b: &BigUint) -> (BigUint, BigUint) {
+        if b.is_zero() {
+            panic!("Division by zero polynomial");
+        }
+
+        let mut quotient = BigUint::zero();
+        let mut remainder = a.clone();
+        let divisor_degree = get_binary_poly_degree(b);
+
+        // Handle special cases
+        if divisor_degree == 0 {
+            // Divisor is 1 (b = 1)
+            return (a.clone(), BigUint::zero());
+        }
 
         while get_binary_poly_degree(&remainder) >= divisor_degree {
             let remainder_degree = get_binary_poly_degree(&remainder);
             let shift = remainder_degree - divisor_degree;
 
-            for i in 0..divisor.len() {
-                if i + shift / 64 < remainder.len() {
-                    remainder[i + shift / 64] ^= divisor[i] << (shift % 64);
-                    if shift % 64 > 0 && i + shift / 64 + 1 < remainder.len() {
-                        remainder[i + shift / 64 + 1] ^= divisor[i] >> (64 - shift % 64);
-                    }
-                }
+            // Update the quotient
+            quotient |= BigUint::one() << shift;
+
+            // Subtract (XOR) the shifted divisor from the remainder
+            remainder ^= b << shift;
+
+            // Avoid infinite loops by checking if remainder decreases
+            if get_binary_poly_degree(&remainder) >= remainder_degree {
+                panic!("Infinite loop detected in poly_div: Remainder did not decrease");
             }
-
-            if shift / 64 < quotient.len() {
-                quotient[shift / 64] |= 1u64 << (shift % 64);
-            }
-        }
-
-        while remainder.last() == Some(&0) {
-            remainder.pop();
-        }
-
-        while quotient.last() == Some(&0) {
-            quotient.pop();
         }
 
         (quotient, remainder)
     }
 
-    fn poly_inv(ctx: &FieldContext, a: &[u64]) -> Option<Vec<u64>> {
+    fn poly_inv(ctx: &FieldContext, a: &BigUint) -> Option<BigUint> {
         let irreducible = &ctx.irreducible_binary_poly;
         let (gcd, u, _) = Self::poly_extended_gcd(a, irreducible);
 
-        if gcd == vec![1] {
+        if gcd == BigUint::one() {
             Some(u)
         } else {
             None
         }
     }
 
-    fn poly_mod(ctx: &FieldContext, a: &[u64]) -> Vec<u64> {
-        let mut remainder = a.to_vec();
+    fn poly_mod(ctx: &FieldContext, a: &BigUint) -> BigUint {
+        let mut remainder = a.clone();
         let divisor = &ctx.irreducible_binary_poly;
         let divisor_degree = get_binary_poly_degree(divisor);
 
-        loop {
+        while get_binary_poly_degree(&remainder) >= divisor_degree {
             let remainder_degree = get_binary_poly_degree(&remainder);
-
-            if remainder_degree < divisor_degree {
-                break;
-            }
-
             let shift = remainder_degree - divisor_degree;
-
-            for i in 0..divisor.len() {
-                if i + shift / 64 < remainder.len() {
-                    remainder[i + shift / 64] ^= divisor[i] << (shift % 64);
-                    if shift % 64 > 0 && i + shift / 64 + 1 < remainder.len() {
-                        remainder[i + shift / 64 + 1] ^= divisor[i] >> (64 - shift % 64);
-                    }
+            for i in 0..divisor.bits() as usize {
+                if i + shift / 64 < remainder.bits() as usize {
+                    remainder ^= divisor << shift;
                 }
             }
-        }
-
-        while remainder.last() == Some(&0) {
-            remainder.pop();
         }
 
         remainder
     }
 
-    pub fn poly_mul(a: &[u64], b: &[u64]) -> Vec<u64> {
-        let max_len = a.len() + b.len();
-        let mut result = vec![0u64; max_len];
-
-        for &a_val in a.iter() {
-            for j in 0..64 {
-                if (a_val >> j) & 1 == 1 {
-                    for (k, &b_val) in b.iter().enumerate() {
-                        let shift = j + k * 64;
-                        let word = shift / 64;
-                        let bit = shift % 64;
-
-                        if word < result.len() {
-                            result[word] ^= b_val << bit;
-                            if bit > 0 && word + 1 < result.len() {
-                                result[word + 1] ^= b_val >> (64 - bit);
-                            }
-                        }
-                    }
-                }
+    pub fn poly_mul(a: &BigUint, b: &BigUint) -> BigUint {
+        let mut result = BigUint::zero();
+        let mut b = b.clone();
+        for i in 0..a.bits() as usize {
+            if (a >> i) & BigUint::one() == BigUint::one() {
+                result ^= &b;
             }
+            b <<= 1;
         }
-
-        while result.last() == Some(&0) {
-            result.pop();
-        }
-
         result
     }
 }
@@ -300,9 +225,8 @@ impl<'a> Add for F2PolynomialElement<'a> {
 impl<'a> Sub for F2PolynomialElement<'a> {
     type Output = Self;
 
-    // OPTIMIZE: do we need to clone here?
     fn sub(self, rhs: Self) -> Self::Output {
-        return self.clone() + rhs.clone();
+        return self + rhs;
     }
 }
 
@@ -342,121 +266,228 @@ mod tests {
 
     #[test]
     fn test_binary_polynomial_addition() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         let sum = poly_a + poly_b;
-        assert_eq!(sum, F2PolynomialElement::new(&ctx, vec![0b10110011011000]));
+        assert_eq!(
+            sum,
+            F2PolynomialElement::new(&ctx, BigUint::from(0b10110011011000u64))
+        );
     }
 
     #[test]
     fn test_binary_polynomial_subtraction() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         let diff_a_b = poly_a.clone() - poly_b.clone();
         let diff_b_a = poly_b - poly_a;
         assert_eq!(
             diff_a_b,
-            F2PolynomialElement::new(&ctx, vec![0b10110011011000])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b10110011011000u64))
         );
         assert_eq!(
             diff_b_a,
-            F2PolynomialElement::new(&ctx, vec![0b10110011011000])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b10110011011000u64))
         );
     }
 
     #[test]
     fn test_binary_polynomial_multiplication() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         let mult = poly_a * poly_b;
         assert_eq!(
             mult,
-            F2PolynomialElement::new(&ctx, vec![0b1110001011001111])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b1110001011001111u64))
         );
     }
 
     #[test]
     fn test_binary_polynomial_negation() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         let neg_a = -poly_a;
         let neg_b = -poly_b;
 
         assert_eq!(
             neg_a,
-            F2PolynomialElement::new(&ctx, vec![0b1000101000011101])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64))
         );
         assert_eq!(
             neg_b,
-            F2PolynomialElement::new(&ctx, vec![0b1010011011000101])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64))
         );
     }
 
     #[test]
     fn test_binary_polynomial_inverse() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         let inv_a = poly_a.inverse();
         let inv_b = poly_b.inverse();
 
+        assert_eq!(inv_a.clone() * poly_a, F2PolynomialElement::one(&ctx));
+        assert_eq!(inv_b.clone() * poly_b, F2PolynomialElement::one(&ctx));
+
         assert_eq!(
             inv_a,
-            F2PolynomialElement::new(&ctx, vec![0b111001101011011])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b111001101011011u64))
         );
         assert_eq!(
             inv_b,
-            F2PolynomialElement::new(&ctx, vec![0b1100101110010000])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b1100101110010000u64))
         );
     }
 
     #[test]
+    fn test_binary_polynomial_division_internals() {
+        let a = BigUint::from(0b1011010u64);
+        let b = BigUint::from(0b101u64);
+
+        let (quotient, remainder) = F2PolynomialElement::poly_div(&a, &b);
+
+        assert_eq!(quotient, BigUint::from(0b10010u64));
+        assert_eq!(remainder, BigUint::from(0b0u64));
+
+        let a = BigUint::from(0b1011010u64);
+        let b = BigUint::from(0b11u64);
+
+        let (quotient, remainder) = F2PolynomialElement::poly_div(&a, &b);
+
+        assert_eq!(quotient, BigUint::from(0b110110u64));
+        assert_eq!(remainder, BigUint::from(0b0u64));
+
+        let a = BigUint::from(0b1011010u64);
+        let b = BigUint::from(0b1011u64);
+
+        let (quotient, remainder) = F2PolynomialElement::poly_div(&a, &b);
+
+        assert_eq!(quotient, BigUint::from(0b1000u64));
+        assert_eq!(remainder, BigUint::from(0b10u64));
+
+        let a = BigUint::from(0b1011010u64);
+        let b = BigUint::from(0b101011111u64);
+
+        assert_eq!(get_binary_poly_degree(&a), 6);
+        assert_eq!(get_binary_poly_degree(&b), 8);
+
+        let (quotient, remainder) = F2PolynomialElement::poly_div(&a, &b);
+
+        assert_eq!(quotient, BigUint::zero());
+        assert_eq!(remainder, BigUint::from(0b1011010u64));
+    }
+
+    #[test]
+    fn test_binary_polynomial_extended_gcd() {
+        let a = BigUint::from(0b1011u64); // Polynomial a(x) = x^3 + x + 1
+        let b = BigUint::from(0b11u64); // Polynomial b(x) = x + 1
+
+        let (gcd, u, v) = F2PolynomialElement::poly_extended_gcd(&a, &b);
+
+        // GCD of x^3 + x + 1 and x + 1 should be 1
+        assert_eq!(gcd, BigUint::one());
+
+        // Verify Bézout's identity: u * a + v * b = gcd
+        let lhs = (F2PolynomialElement::poly_mul(&u, &a)) ^ (F2PolynomialElement::poly_mul(&v, &b));
+        assert_eq!(lhs, gcd);
+
+        let a = BigUint::from(0b110101u64); // Polynomial a(x) = x^5 + x^4 + x^2 + 1
+        let b = BigUint::from(0b101u64); // Polynomial b(x) = x^2 + x + 1
+
+        let (gcd, u, v) = F2PolynomialElement::poly_extended_gcd(&a, &b);
+
+        // GCD of these polynomials should be x + 1
+        assert_eq!(gcd, BigUint::from(0b11u64));
+
+        // Verify Bézout's identity: u * a + v * b = gcd
+        let lhs = (F2PolynomialElement::poly_mul(&u, &a)) ^ (F2PolynomialElement::poly_mul(&v, &b));
+        assert_eq!(lhs, gcd);
+
+        let a = BigUint::from(0b100011011u64); // Polynomial a(x) = x^8 + x^4 + x^3 + x + 1 (irreducible)
+        let b = BigUint::from(0b0u64); // Polynomial b(x) = 0
+
+        let (gcd, u, v) = F2PolynomialElement::poly_extended_gcd(&a, &b);
+
+        // GCD with zero should be the non-zero polynomial
+        assert_eq!(gcd, a);
+
+        // u and v should satisfy Bézout's identity
+        let lhs = (F2PolynomialElement::poly_mul(&u, &a)) ^ (F2PolynomialElement::poly_mul(&v, &b));
+        assert_eq!(lhs, gcd);
+
+        let a = BigUint::from(0b101010u64); // Polynomial a(x) = x^5 + x^3 + x
+        let b = BigUint::from(0b1110u64); // Polynomial b(x) = x^3 + x^2 + x
+
+        let (gcd, u, v) = F2PolynomialElement::poly_extended_gcd(&a, &b);
+
+        // GCD of these polynomials should be x
+        assert_eq!(gcd, BigUint::from(0b1110u64));
+
+        // Verify Bézout's identity: u * a + v * b = gcd
+        let lhs = (F2PolynomialElement::poly_mul(&u, &a)) ^ (F2PolynomialElement::poly_mul(&v, &b));
+        assert_eq!(lhs, gcd);
+
+        let a = BigUint::from(0b111u64); // Polynomial a(x) = x^2 + x + 1
+        let b = BigUint::from(0b1u64); // Polynomial b(x) = 1
+
+        let (gcd, u, v) = F2PolynomialElement::poly_extended_gcd(&a, &b);
+
+        // GCD of any polynomial with 1 should be 1
+        assert_eq!(gcd, BigUint::one());
+
+        // Verify Bézout's identity: u * a + v * b = gcd
+        let lhs = (F2PolynomialElement::poly_mul(&u, &a)) ^ (F2PolynomialElement::poly_mul(&v, &b));
+        assert_eq!(lhs, gcd);
+    }
+
+    #[test]
     fn test_binary_polynomial_division() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         let div_a_b = poly_a.clone() / poly_b.clone();
         let div_b_a = poly_b / poly_a;
 
         assert_eq!(
             div_a_b,
-            F2PolynomialElement::new(&ctx, vec![0b11001000101111])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b11001000101111u64))
         );
         assert_eq!(
             div_b_a,
-            F2PolynomialElement::new(&ctx, vec![0b1101101111011110])
+            F2PolynomialElement::new(&ctx, BigUint::from(0b1101101111011110u64))
         );
     }
 
     #[test]
     fn test_binary_polynomial_display() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         assert_eq!(
             format!("{}", poly_a),
@@ -470,11 +501,11 @@ mod tests {
 
     #[test]
     fn test_binary_polynomial_exponentiation() {
-        let irreducible_poly = vec![0b11111101111101001];
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
         let ctx = FieldContext::new_binary(irreducible_poly);
 
-        let poly_a = F2PolynomialElement::new(&ctx, vec![0b1000101000011101]);
-        let poly_b = F2PolynomialElement::new(&ctx, vec![0b1010011011000101]);
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
         const EXP: u64 = 5;
 
@@ -489,5 +520,19 @@ mod tests {
             exp_b,
             poly_b.clone() * poly_b.clone() * poly_b.clone() * poly_b.clone() * poly_b
         );
+    }
+
+    #[test]
+    fn test_binary_polynomial_degree() {
+        let irreducible_poly = BigUint::from(0b11111101111101001u64);
+        let ctx = FieldContext::new_binary(irreducible_poly);
+
+        let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
+        let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
+
+        assert_eq!(get_binary_poly_degree(&poly_a.coeffs), 15);
+        assert_eq!(get_binary_poly_degree(&poly_b.coeffs), 15);
+
+        assert_eq!(ctx.get_irreducible_poly_degree(), 16);
     }
 }

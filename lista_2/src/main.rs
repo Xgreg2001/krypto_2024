@@ -3,6 +3,7 @@ use diffie_hellman::field::fp::FpElement;
 use diffie_hellman::field::fp_poly::FpPolynomialElement;
 use diffie_hellman::{FieldContext, FieldElement};
 use num::bigint::ToBigInt;
+use num::BigUint;
 
 // TODO: DIFFIE-HELLMAN
 // TODO: special implementation for p = 2
@@ -69,11 +70,11 @@ fn main() {
     let poly_exp = poly_a.pow(5);
     println!("F_{{p^2}}: a^5 = {}", poly_exp);
 
-    let irreducible_bin_poly = vec![0b11111101111101001];
+    let irreducible_bin_poly = BigUint::from(0b11111101111101001u64);
     let bin_ctx = FieldContext::new_binary(irreducible_bin_poly.clone());
 
-    let poly_a = F2PolynomialElement::new(&bin_ctx, vec![0b1000101000011101]);
-    let poly_b = F2PolynomialElement::new(&bin_ctx, vec![0b1010011011000101]);
+    let poly_a = F2PolynomialElement::new(&bin_ctx, BigUint::from(0b1000101000011101u64));
+    let poly_b = F2PolynomialElement::new(&bin_ctx, BigUint::from(0b1010011011000101u64));
 
     println!(
         "irreducible_bin_poly: {}",

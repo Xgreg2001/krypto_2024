@@ -1,7 +1,7 @@
 pub mod field;
 
 use field::{f2_poly::F2PolynomialElement, fp::FpElement};
-use num::bigint::BigInt;
+use num::{bigint::BigInt, BigUint, Zero};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /// Trait for FieldElements over some field.
@@ -30,7 +30,7 @@ pub trait FieldElement<'a>:
 pub struct FieldContext {
     pub p: BigInt,
     pub irreducible_poly: Vec<BigInt>,
-    pub irreducible_binary_poly: Vec<u64>,
+    pub irreducible_binary_poly: BigUint,
 }
 
 impl FieldContext {
@@ -38,11 +38,11 @@ impl FieldContext {
         Self {
             p,
             irreducible_poly,
-            irreducible_binary_poly: vec![],
+            irreducible_binary_poly: BigUint::zero(),
         }
     }
 
-    pub fn new_binary(irreducible_binary_poly: Vec<u64>) -> Self {
+    pub fn new_binary(irreducible_binary_poly: BigUint) -> Self {
         Self {
             p: BigInt::from(2),
             irreducible_poly: vec![],
@@ -51,7 +51,7 @@ impl FieldContext {
     }
 
     pub fn is_binary(&self) -> bool {
-        self.irreducible_binary_poly.len() > 0
+        self.irreducible_binary_poly > BigUint::zero()
     }
 
     pub fn to_fp(&self, val: BigInt) -> FpElement<'_> {
@@ -71,12 +71,11 @@ impl FieldContext {
     }
 }
 
-pub fn get_binary_poly_degree(a: &Vec<u64>) -> usize {
-    let full_chunks = a.len() - 1;
-    let last_chunk = a[0];
-    const CHUNK_SIZE: usize = 64;
+pub fn get_binary_poly_degree(a: &BigUint) -> usize {
+    // Find the degree of the polynomial by finding the highest bit set
+    if a.is_zero() {
+        return 0;
+    }
 
-    let leftmost_bit = CHUNK_SIZE - last_chunk.leading_zeros() as usize;
-
-    full_chunks * CHUNK_SIZE + leftmost_bit
+    (a.bits() - 1) as usize
 }
