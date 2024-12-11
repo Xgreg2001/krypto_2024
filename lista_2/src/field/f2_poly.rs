@@ -43,17 +43,17 @@ impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {
         res
     }
 
-    fn pow(&self, exp: u64) -> Self {
+    fn pow(&self, exp: &BigUint) -> Self {
         let ctx = self.context;
         let mut base = self.clone();
         let mut result = Self::one(ctx);
-        let mut e = exp;
+        let mut e = exp.clone();
 
-        while e > 0 {
-            if (e & 1) == 1 {
-                result = result * base.clone();
+        while e > BigUint::zero() {
+            if (&e & BigUint::one()) == BigUint::one() {
+                result = &result * &base;
             }
-            base = base.clone() * base.clone();
+            base = &base * &base;
             e >>= 1;
         }
         result
@@ -559,10 +559,10 @@ mod tests {
         let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
         let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
-        const EXP: u64 = 5;
+        let exp: BigUint = BigUint::from(5u64);
 
-        let exp_a = poly_a.pow(EXP);
-        let exp_b = poly_b.pow(EXP);
+        let exp_a = poly_a.pow(&exp);
+        let exp_b = poly_b.pow(&exp);
 
         assert_eq!(
             exp_a,

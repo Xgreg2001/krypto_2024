@@ -1,5 +1,6 @@
 use num::bigint::BigInt;
 use num::traits::{One, Zero};
+use num::BigUint;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -168,15 +169,20 @@ impl<'a> FieldElement<'a> for FpElement<'a> {
         FpElement::new(self.context, inv)
     }
 
-    fn pow(&self, exp: u64) -> Self {
+    fn pow(&self, exp: &BigUint) -> Self {
         let mut base = self.val.clone();
         let mut result = BigInt::one();
-        let mut e_val = exp;
-        while e_val > 0 {
-            if (e_val & 1) == 1 {
-                result *= &base;
+        let mut dummy = BigInt::one();
+        let mut e_val = exp.clone();
+
+        while e_val > BigUint::zero() {
+            if (&e_val & BigUint::one()) == BigUint::one() {
+                result = (&result * &base) % &self.context.p;
+            } else {
+                // do dummy multiplication to not leak information about the exponent
+                dummy = (&dummy * &base) % &self.context.p;
             }
-            base = &base * &base;
+            base = (&base * &base) % &self.context.p;
             e_val >>= 1;
         }
         FpElement::new(self.context, result)
@@ -186,17 +192,12 @@ impl<'a> FieldElement<'a> for FpElement<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num::bigint::ToBigInt;
+    use num::bigint::{ToBigInt, ToBigUint};
 
     #[test]
     fn test_fp_addition() {
         let p = 17.to_bigint().unwrap();
-        let irreducible_poly = vec![
-            3.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-        ];
-        let ctx = FieldContext::new_poly(p, irreducible_poly);
+        let ctx = FieldContext::new_prime(p);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -214,12 +215,7 @@ mod tests {
     #[test]
     fn test_fp_subtraction() {
         let p = 17.to_bigint().unwrap();
-        let irreducible_poly = vec![
-            3.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-        ];
-        let ctx = FieldContext::new_poly(p, irreducible_poly);
+        let ctx = FieldContext::new_prime(p);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -234,12 +230,7 @@ mod tests {
     #[test]
     fn test_fp_multiplication() {
         let p = 17.to_bigint().unwrap();
-        let irreducible_poly = vec![
-            3.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-        ];
-        let ctx = FieldContext::new_poly(p, irreducible_poly);
+        let ctx = FieldContext::new_prime(p);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -256,12 +247,7 @@ mod tests {
     #[test]
     fn test_fp_negation() {
         let p = 17.to_bigint().unwrap();
-        let irreducible_poly = vec![
-            3.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-        ];
-        let ctx = FieldContext::new_poly(p, irreducible_poly);
+        let ctx = FieldContext::new_prime(p);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         assert_eq!((-a).val, 15.to_bigint().unwrap()); // since 17-2=15
@@ -272,12 +258,7 @@ mod tests {
     #[test]
     fn test_fp_inverse() {
         let p = 17.to_bigint().unwrap();
-        let irreducible_poly = vec![
-            3.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-        ];
-        let ctx = FieldContext::new_poly(p, irreducible_poly);
+        let ctx = FieldContext::new_prime(p);
 
         let a = FpElement::new(&ctx, 3.to_bigint().unwrap());
         let inv_a = a.inverse();
@@ -292,12 +273,7 @@ mod tests {
     #[test]
     fn test_fp_division() {
         let p = 17.to_bigint().unwrap();
-        let irreducible_poly = vec![
-            3.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-        ];
-        let ctx = FieldContext::new_poly(p, irreducible_poly);
+        let ctx = FieldContext::new_prime(p);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
@@ -310,25 +286,87 @@ mod tests {
     #[test]
     fn test_fp_exponentiation() {
         let p = 17.to_bigint().unwrap();
-        let irreducible_poly = vec![
-            3.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-            1.to_bigint().unwrap(),
-        ];
-        let ctx = FieldContext::new_poly(p, irreducible_poly);
+        let ctx = FieldContext::new_prime(p);
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         // a^5 = 32 mod17=15
-        let exp = 5;
+        let exp = 5.to_biguint().unwrap();
 
-        let res = a.pow(exp);
+        let res = a.pow(&exp);
         assert_eq!(res.val, 15.to_bigint().unwrap());
 
         // Check a bigger exponent
-        let exp_big = 16; // a^(16)=2^16=65536 mod17
-                          // 2^16 = (2^4)^4 = (16)^4 = (16 mod17=16)^2=256 mod17=256-255=1 again and again => actually 2^16 mod17= (2^(17-1))=1 by Fermat's little theorem
-        let res_big = a.pow(exp_big);
+        let exp_big = 16.to_biguint().unwrap(); // a^(16)=2^16=65536 mod17
+                                                // 2^16 = (2^4)^4 = (16)^4 = (16 mod17=16)^2=256 mod17=256-255=1 again and again => actually 2^16 mod17= (2^(17-1))=1 by Fermat's little theorem
+        let res_big = a.pow(&exp_big);
 
         assert_eq!(res_big.val, 1.to_bigint().unwrap());
     }
+
+    // #[test]
+    // fn test_fp_exponentiation_security() {
+    //     let p = 17.to_bigint().unwrap();
+    //     let ctx = FieldContext::new_prime(p);
+    //
+    //     let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
+    //     let exp_ones = 0b111111111111111111111111111;
+    //     let exp_zeros = 0b100000000000000000000000000;
+    //
+    //     const RUNS: u32 = 50;
+    //
+    //     let mut times_ones = Vec::with_capacity(RUNS as usize);
+    //     let mut times_zeros = Vec::with_capacity(RUNS as usize);
+    //
+    //     for _ in 0..RUNS {
+    //         let now = std::time::Instant::now();
+    //         let _ = a.pow(exp_ones);
+    //         times_ones.push(now.elapsed());
+    //     }
+    //
+    //     for _ in 0..RUNS {
+    //         let now = std::time::Instant::now();
+    //         let _ = a.pow(exp_zeros);
+    //         times_zeros.push(now.elapsed());
+    //     }
+    //
+    //     let ones_nanos_avg: f64 =
+    //         times_ones.iter().map(|x| x.as_nanos() as f64).sum::<f64>() / RUNS as f64;
+    //     let zeros_nanos_avg: f64 =
+    //         times_zeros.iter().map(|x| x.as_nanos() as f64).sum::<f64>() / RUNS as f64;
+    //
+    //     let ones_nanos_stddev: f64 = times_ones
+    //         .iter()
+    //         .map(|x| (x.as_nanos() as f64 - ones_nanos_avg).powi(2))
+    //         .sum::<f64>()
+    //         .sqrt()
+    //         / RUNS as f64;
+    //
+    //     let zeros_nanos_stddev: f64 = times_zeros
+    //         .iter()
+    //         .map(|x| (x.as_nanos() as f64 - zeros_nanos_avg).powi(2))
+    //         .sum::<f64>()
+    //         .sqrt()
+    //         / RUNS as f64;
+    //
+    //     println!("Ones: {}ns ± {}ns", ones_nanos_avg, ones_nanos_stddev);
+    //     println!("Zeros: {}ns ± {}ns", zeros_nanos_avg, zeros_nanos_stddev);
+    //
+    //     println!("s1/s2 = {}", ones_nanos_stddev / zeros_nanos_stddev);
+    //
+    //     // two-sample t-test
+    //     // H0: The means of the two samples are equal
+    //     // H1: The means of the two samples are not equal
+    //     // We use a two-tailed t-test with a significance level of 0.05
+    //
+    //     let t = (ones_nanos_avg - zeros_nanos_avg)
+    //         / (((ones_nanos_stddev.powi(2) / RUNS as f64)
+    //             + (zeros_nanos_stddev.powi(2) / RUNS as f64))
+    //             .sqrt());
+    //
+    //     let crit = 1.984467;
+    //
+    //     println!("t = {}", t);
+    //     // show that samples are equal
+    //     assert!(abs(t) < crit);
+    // }
 }

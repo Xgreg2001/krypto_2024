@@ -20,7 +20,7 @@ pub trait FieldElement<'a>:
     fn one(ctx: &'a FieldContext) -> Self;
     fn is_zero(&self) -> bool;
     fn inverse(&self) -> Self;
-    fn pow(&self, exp: u64) -> Self;
+    fn pow(&self, exp: &BigUint) -> Self;
 }
 
 /// Holds the parameters of the field:
@@ -47,6 +47,14 @@ impl FieldContext {
             p: BigInt::from(2),
             irreducible_poly: vec![],
             irreducible_binary_poly,
+        }
+    }
+
+    pub fn new_prime(p: BigInt) -> Self {
+        Self {
+            p,
+            irreducible_poly: vec![],
+            irreducible_binary_poly: BigUint::zero(),
         }
     }
 

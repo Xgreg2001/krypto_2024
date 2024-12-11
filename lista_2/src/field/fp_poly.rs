@@ -1,4 +1,5 @@
 use num::bigint::{BigInt, ToBigInt};
+use num::{BigUint, One, Zero};
 use std::fmt;
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
 
@@ -418,14 +419,14 @@ impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
         res
     }
 
-    fn pow(&self, exp: u64) -> Self {
+    fn pow(&self, exp: &BigUint) -> Self {
         let ctx = self.context;
         let mut base = self.clone();
         let mut result = Self::one(ctx);
-        let mut e = exp;
+        let mut e = exp.clone();
 
-        while e > 0 {
-            if (e & 1) == 1 {
+        while e > BigUint::zero() {
+            if (&e & BigUint::one()) == BigUint::one() {
                 result = result * base.clone();
             }
             base = base.clone() * base.clone();
@@ -438,7 +439,7 @@ impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num::bigint::ToBigInt;
+    use num::bigint::{ToBigInt, ToBigUint};
 
     #[test]
     fn test_polynomial_addition() {
@@ -636,10 +637,10 @@ mod tests {
                 ctx.to_fp(3.to_bigint().unwrap()),
             ],
         ); // 2+3x
-        let exp = 5;
+        let exp = 5.to_biguint().unwrap();
 
         assert_eq!(
-            poly_a.pow(exp),
+            poly_a.pow(&exp),
             FpPolynomialElement::new(
                 &ctx,
                 vec![
@@ -649,9 +650,9 @@ mod tests {
             )
         );
 
-        let exp_big = 16; // poly_a^(16)
+        let exp_big = 16.to_biguint().unwrap(); // poly_a^(16)
         assert_eq!(
-            poly_a.pow(exp_big),
+            poly_a.pow(&exp_big),
             FpPolynomialElement::new(
                 &ctx,
                 vec![

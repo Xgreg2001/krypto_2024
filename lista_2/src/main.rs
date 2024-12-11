@@ -1,6 +1,4 @@
-use diffie_hellman::field::f2_poly::F2PolynomialElement;
 use diffie_hellman::field::fp::FpElement;
-use diffie_hellman::field::fp_poly::FpPolynomialElement;
 use diffie_hellman::{FieldContext, FieldElement};
 use num::bigint::ToBigInt;
 use num::BigUint;
@@ -10,76 +8,69 @@ use num::BigUint;
 // TODO: fix exponentiation to ensure constant time operation
 // TODO: check with bigger numbers
 
+fn calcualte_average(times: &[std::time::Duration]) -> f64 {
+    times.iter().map(|x| x.as_nanos() as f64).sum::<f64>() / times.len() as f64
+}
+
+fn calculate_stddev(times: &[std::time::Duration], avg: f64) -> f64 {
+    times
+        .iter()
+        .map(|x| (x.as_nanos() as f64 - avg).powi(2))
+        .sum::<f64>()
+        .sqrt()
+        / times.len() as f64
+}
+
 fn main() {
     let p = 17.to_bigint().unwrap();
-    let irreducible_poly = vec![
-        3.to_bigint().unwrap(),
-        1.to_bigint().unwrap(),
-        1.to_bigint().unwrap(),
-    ];
-    let ctx = FieldContext::new_poly(p, irreducible_poly);
+    let ctx = FieldContext::new_prime(p);
 
-    println!("Field context: {:?}", ctx);
+    let a = FpElement::new(&ctx, 7.to_bigint().unwrap());
+    let exp_ones = BigUint::parse_bytes(b"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16).unwrap();
+    let exp_zeros = BigUint::parse_bytes(b"800000000000000000000000000000", 16).unwrap();
+    let exp_half = BigUint::parse_bytes(b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", 16).unwrap();
+    let exp_quarter = BigUint::parse_bytes(b"888888888888888888888888888888", 16).unwrap();
 
-    let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
-    let b = FpElement::new(&ctx, 3.to_bigint().unwrap());
-    let c = &a + &b;
-    println!("Fp: a = {}, b = {}", a, b);
-    println!("Fp: a+b = {}", c);
+    const RUNS: u32 = 100000;
 
-    let inv_a = a.inverse();
-    println!("Fp: a^-1 = {}", inv_a);
-    println!("Fp: a*a^-1 = {}", &a * &inv_a);
+    let mut times_ones = Vec::with_capacity(RUNS as usize);
+    let mut times_zeros = Vec::with_capacity(RUNS as usize);
+    let mut times_half = Vec::with_capacity(RUNS as usize);
+    let mut times_quarter = Vec::with_capacity(RUNS as usize);
 
-    let prod = &a * &b;
-    println!("Fp: a*b = {}", prod);
+    for _ in 0..RUNS {
+        let now = std::time::Instant::now();
+        let _ = a.pow(&exp_ones);
+        times_ones.push(now.elapsed());
 
-    let div = a / b;
-    println!("Fp: a/b = {}", div);
+        let now = std::time::Instant::now();
+        let _ = a.pow(&exp_zeros);
+        times_zeros.push(now.elapsed());
 
-    let poly_a = FpPolynomialElement::new(
-        &ctx,
-        vec![
-            ctx.to_fp(2.to_bigint().unwrap()),
-            ctx.to_fp(3.to_bigint().unwrap()),
-        ],
-    );
+        let now = std::time::Instant::now();
+        let _ = a.pow(&exp_half);
+        times_half.push(now.elapsed());
 
-    let poly_b = FpPolynomialElement::new(
-        &ctx,
-        vec![
-            ctx.to_fp(5.to_bigint().unwrap()),
-            ctx.to_fp(1.to_bigint().unwrap()),
-        ],
-    );
+        let now = std::time::Instant::now();
+        let _ = a.pow(&exp_quarter);
+        times_quarter.push(now.elapsed());
+    }
 
-    println!("F_{{p^2}}: a = {}, b = {}", poly_a, poly_b);
+    let ones_nanos_avg = calcualte_average(&times_ones);
+    let zeros_nanos_avg = calcualte_average(&times_zeros);
+    let half_nanos_avg = calcualte_average(&times_half);
+    let quarter_nanos_avg = calcualte_average(&times_quarter);
 
-    let poly_sum = poly_a.clone() + poly_b.clone();
-    println!("F_{{p^2}}: a+b = {}", poly_sum);
+    let ones_nanos_stddev = calculate_stddev(&times_ones, ones_nanos_avg);
+    let zeros_nanos_stddev = calculate_stddev(&times_zeros, zeros_nanos_avg);
+    let half_nanos_stddev = calculate_stddev(&times_half, half_nanos_avg);
+    let quarter_nanos_stddev = calculate_stddev(&times_quarter, quarter_nanos_avg);
 
-    let poly_prod = poly_a.clone() * poly_b.clone();
-    println!("F_{{p^2}}: a*b = {}", poly_prod);
-
-    let poly_inv_b = poly_b.inverse();
-    println!("F_{{p^2}}: b^-1 = {}", poly_inv_b);
-
-    let poly_div = poly_a.clone() / poly_b.clone();
-    println!("F_{{p^2}}: a/b = {}", poly_div);
-
-    let poly_exp = poly_a.pow(5);
-    println!("F_{{p^2}}: a^5 = {}", poly_exp);
-
-    let irreducible_bin_poly = BigUint::from(0b11111101111101001u64);
-    let bin_ctx = FieldContext::new_binary(irreducible_bin_poly.clone());
-
-    let poly_a = F2PolynomialElement::new(&bin_ctx, BigUint::from(0b1000101000011101u64));
-    let poly_b = F2PolynomialElement::new(&bin_ctx, BigUint::from(0b1010011011000101u64));
-
+    println!("Ones: {}ns ± {}ns", ones_nanos_avg, ones_nanos_stddev);
+    println!("Zeros: {}ns ± {}ns", zeros_nanos_avg, zeros_nanos_stddev);
+    println!("Half: {}ns ± {}ns", half_nanos_avg, half_nanos_stddev);
     println!(
-        "irreducible_bin_poly: {}",
-        F2PolynomialElement::new(&bin_ctx, irreducible_bin_poly)
+        "Quarter: {}ns ± {}ns",
+        quarter_nanos_avg, quarter_nanos_stddev
     );
-
-    println!("a = {}, b = {}", poly_a, poly_b);
 }
