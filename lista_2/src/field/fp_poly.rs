@@ -423,13 +423,17 @@ impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
         let ctx = self.context;
         let mut base = self.clone();
         let mut result = Self::one(ctx);
+        let mut dummy = Self::one(ctx);
         let mut e = exp.clone();
 
         while e > BigUint::zero() {
             if (&e & BigUint::one()) == BigUint::one() {
-                result = result * base.clone();
+                result = &result * &base;
+            } else {
+                dummy = &dummy * &base;
             }
-            base = base.clone() * base.clone();
+
+            base = &base * &base;
             e >>= 1;
         }
         result
