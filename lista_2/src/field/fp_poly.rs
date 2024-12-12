@@ -423,18 +423,35 @@ impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
         let ctx = self.context;
         let mut base = self.clone();
         let mut result = Self::one(ctx);
-        let mut dummy = Self::one(ctx);
         let mut e = exp.clone();
 
         while e > BigUint::zero() {
             if (&e & BigUint::one()) == BigUint::one() {
+                result = &result * &base;
+            }
+
+            base = &base * &base;
+            e >>= 1;
+        }
+        result
+    }
+
+    fn pow_secure(&self, exp: &BigUint, subgroup_order: &BigUint) -> Self {
+        let ctx = self.context;
+        let mut base = self.clone();
+        let mut result = Self::one(ctx);
+        let mut dummy = Self::one(ctx);
+
+        let exp = exp % subgroup_order;
+
+        for shift in 0..subgroup_order.bits() {
+            if ((&exp >> shift) & BigUint::one()) == BigUint::one() {
                 result = &result * &base;
             } else {
                 dummy = &dummy * &base;
             }
 
             base = &base * &base;
-            e >>= 1;
         }
         result
     }
@@ -634,6 +651,7 @@ mod tests {
             1.to_bigint().unwrap(),
         ];
         let ctx = FieldContext::new_poly(p, irreducible_poly);
+
         let poly_a = FpPolynomialElement::new(
             &ctx,
             vec![
@@ -641,6 +659,9 @@ mod tests {
                 ctx.to_fp(3.to_bigint().unwrap()),
             ],
         ); // 2+3x
+
+        let order = BigUint::from(144u32);
+
         let exp = 5.to_biguint().unwrap();
 
         assert_eq!(
@@ -654,9 +675,31 @@ mod tests {
             )
         );
 
+        assert_eq!(
+            poly_a.pow_secure(&exp, &order),
+            FpPolynomialElement::new(
+                &ctx,
+                vec![
+                    ctx.to_fp(15.to_bigint().unwrap()),
+                    ctx.to_fp(4.to_bigint().unwrap())
+                ]
+            )
+        );
+
         let exp_big = 16.to_biguint().unwrap(); // poly_a^(16)
         assert_eq!(
             poly_a.pow(&exp_big),
+            FpPolynomialElement::new(
+                &ctx,
+                vec![
+                    ctx.to_fp(1.to_bigint().unwrap()),
+                    ctx.to_fp(6.to_bigint().unwrap())
+                ]
+            )
+        );
+
+        assert_eq!(
+            poly_a.pow_secure(&exp_big, &order),
             FpPolynomialElement::new(
                 &ctx,
                 vec![

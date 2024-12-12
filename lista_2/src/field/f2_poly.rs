@@ -47,17 +47,33 @@ impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {
         let ctx = self.context;
         let mut base = self.clone();
         let mut result = Self::one(ctx);
-        let mut dummy = Self::one(ctx);
         let mut e = exp.clone();
 
         while e > BigUint::zero() {
             if (&e & BigUint::one()) == BigUint::one() {
                 result = &result * &base;
+            }
+            base = &base * &base;
+            e >>= 1;
+        }
+        result
+    }
+
+    fn pow_secure(&self, exp: &BigUint, subgroup_order: &BigUint) -> Self {
+        let ctx = self.context;
+        let mut base = self.clone();
+        let mut result = Self::one(ctx);
+        let mut dummy = Self::one(ctx);
+
+        let exp = exp % subgroup_order;
+
+        for shift in 0..subgroup_order.bits() {
+            if ((&exp >> shift) & BigUint::one()) == BigUint::one() {
+                result = &result * &base;
             } else {
                 dummy = &dummy * &base;
             }
             base = &base * &base;
-            e >>= 1;
         }
         result
     }
@@ -562,6 +578,8 @@ mod tests {
         let poly_a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
         let poly_b = F2PolynomialElement::new(&ctx, BigUint::from(0b1010011011000101u64));
 
+        let order = BigUint::from(65535u32);
+
         let exp: BigUint = BigUint::from(5u64);
 
         let exp_a = poly_a.pow(&exp);
@@ -575,6 +593,9 @@ mod tests {
             exp_b,
             &(&(&(&poly_b * &poly_b) * &poly_b) * &poly_b) * &poly_b
         );
+
+        assert_eq!(exp_a, poly_a.pow_secure(&exp, &order));
+        assert_eq!(exp_b, poly_b.pow_secure(&exp, &order));
     }
 
     #[test]

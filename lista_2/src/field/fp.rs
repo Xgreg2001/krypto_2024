@@ -172,18 +172,33 @@ impl<'a> FieldElement<'a> for FpElement<'a> {
     fn pow(&self, exp: &BigUint) -> Self {
         let mut base = self.val.clone();
         let mut result = BigInt::one();
-        let mut dummy = BigInt::one();
         let mut e_val = exp.clone();
 
         while e_val > BigUint::zero() {
             if (&e_val & BigUint::one()) == BigUint::one() {
+                result = (&result * &base) % &self.context.p;
+            }
+            base = (&base * &base) % &self.context.p;
+            e_val >>= 1;
+        }
+        FpElement::new(self.context, result)
+    }
+
+    fn pow_secure(&self, exp: &BigUint, subgroup_order: &BigUint) -> Self {
+        let mut base = self.val.clone();
+        let mut result = BigInt::one();
+        let mut dummy = BigInt::one();
+
+        let exp = exp % subgroup_order;
+
+        for shift in 0..subgroup_order.bits() {
+            if ((&exp >> shift) & BigUint::one()) == BigUint::one() {
                 result = (&result * &base) % &self.context.p;
             } else {
                 // do dummy multiplication to not leak information about the exponent
                 dummy = (&dummy * &base) % &self.context.p;
             }
             base = (&base * &base) % &self.context.p;
-            e_val >>= 1;
         }
         FpElement::new(self.context, result)
     }
@@ -287,20 +302,25 @@ mod tests {
     fn test_fp_exponentiation() {
         let p = 17.to_bigint().unwrap();
         let ctx = FieldContext::new_prime(p);
+        let order = 8.to_biguint().unwrap();
 
         let a = FpElement::new(&ctx, 2.to_bigint().unwrap());
         // a^5 = 32 mod17=15
         let exp = 5.to_biguint().unwrap();
 
         let res = a.pow(&exp);
+        let secure_res = a.pow_secure(&exp, &order);
         assert_eq!(res.val, 15.to_bigint().unwrap());
+        assert_eq!(secure_res.val, 15.to_bigint().unwrap());
 
         // Check a bigger exponent
         let exp_big = 16.to_biguint().unwrap(); // a^(16)=2^16=65536 mod17
                                                 // 2^16 = (2^4)^4 = (16)^4 = (16 mod17=16)^2=256 mod17=256-255=1 again and again => actually 2^16 mod17= (2^(17-1))=1 by Fermat's little theorem
         let res_big = a.pow(&exp_big);
+        let secure_res_big = a.pow_secure(&exp_big, &order);
 
         assert_eq!(res_big.val, 1.to_bigint().unwrap());
+        assert_eq!(secure_res_big.val, 1.to_bigint().unwrap());
     }
 
     // #[test]

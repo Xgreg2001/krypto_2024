@@ -1,11 +1,9 @@
-use std::io::stdin;
-
 use clap::{Parser, Subcommand};
 use diffie_hellman::field::f2_poly::F2PolynomialElement;
 use diffie_hellman::field::fp::FpElement;
 use diffie_hellman::field::fp_poly::FpPolynomialElement;
 use diffie_hellman::{FieldContext, FieldElement};
-use num::bigint::{RandBigInt, ToBigInt};
+use num::bigint::{RandBigInt, ToBigInt, ToBigUint};
 use num::{BigInt, BigUint, One};
 
 // TODO: fix exponentiation to ensure constant time operation
@@ -42,46 +40,62 @@ fn calculate_stddev(times: &[std::time::Duration], avg: f64) -> f64 {
         / times.len() as f64
 }
 
-fn showcase_security<'a, F: FieldElement<'a>>(a: F, title: &str) {
+fn showcase_security<'a, F: FieldElement<'a>>(a: F, order: &BigUint, title: &str) {
     let exp_ones = BigUint::parse_bytes(b"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16).unwrap();
     let exp_zeros = BigUint::parse_bytes(b"800000000000000000000000000000", 16).unwrap();
     let exp_half = BigUint::parse_bytes(b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", 16).unwrap();
     let exp_quarter = BigUint::parse_bytes(b"888888888888888888888888888888", 16).unwrap();
+    let exp_short = BigUint::parse_bytes(b"1", 16).unwrap();
+    let exp_long = order.clone() - BigUint::one();
 
-    const RUNS: u32 = 100;
+    const RUNS: u32 = 1000;
 
     let mut times_ones = Vec::with_capacity(RUNS as usize);
     let mut times_zeros = Vec::with_capacity(RUNS as usize);
     let mut times_half = Vec::with_capacity(RUNS as usize);
     let mut times_quarter = Vec::with_capacity(RUNS as usize);
+    let mut times_short = Vec::with_capacity(RUNS as usize);
+    let mut times_long = Vec::with_capacity(RUNS as usize);
 
     for _ in 0..RUNS {
         let now = std::time::Instant::now();
-        let _ = a.pow(&exp_ones);
+        let _ = a.pow_secure(&exp_ones, order);
         times_ones.push(now.elapsed());
 
         let now = std::time::Instant::now();
-        let _ = a.pow(&exp_zeros);
+        let _ = a.pow_secure(&exp_zeros, order);
         times_zeros.push(now.elapsed());
 
         let now = std::time::Instant::now();
-        let _ = a.pow(&exp_half);
+        let _ = a.pow_secure(&exp_half, order);
         times_half.push(now.elapsed());
 
         let now = std::time::Instant::now();
-        let _ = a.pow(&exp_quarter);
+        let _ = a.pow_secure(&exp_quarter, order);
         times_quarter.push(now.elapsed());
+
+        let now = std::time::Instant::now();
+        let _ = a.pow_secure(&exp_short, order);
+        times_short.push(now.elapsed());
+
+        let now = std::time::Instant::now();
+        let _ = a.pow_secure(&exp_long, order);
+        times_long.push(now.elapsed());
     }
 
     let ones_nanos_avg = calcualte_average(&times_ones);
     let zeros_nanos_avg = calcualte_average(&times_zeros);
     let half_nanos_avg = calcualte_average(&times_half);
     let quarter_nanos_avg = calcualte_average(&times_quarter);
+    let short_nanos_avg = calcualte_average(&times_short);
+    let long_nanos_avg = calcualte_average(&times_long);
 
     let ones_nanos_stddev = calculate_stddev(&times_ones, ones_nanos_avg);
     let zeros_nanos_stddev = calculate_stddev(&times_zeros, zeros_nanos_avg);
     let half_nanos_stddev = calculate_stddev(&times_half, half_nanos_avg);
     let quarter_nanos_stddev = calculate_stddev(&times_quarter, quarter_nanos_avg);
+    let short_nanos_stddev = calculate_stddev(&times_short, short_nanos_avg);
+    let long_nanos_stddev = calculate_stddev(&times_long, long_nanos_avg);
 
     println!("{title}");
 
@@ -92,6 +106,8 @@ fn showcase_security<'a, F: FieldElement<'a>>(a: F, title: &str) {
         "Quarter: {}ns ± {}ns",
         quarter_nanos_avg, quarter_nanos_stddev
     );
+    println!("Short: {}ns ± {}ns", short_nanos_avg, short_nanos_stddev);
+    println!("Long: {}ns ± {}ns", long_nanos_avg, long_nanos_stddev);
 }
 
 fn security_demo() {
@@ -99,7 +115,9 @@ fn security_demo() {
     let ctx = FieldContext::new_prime(p);
 
     let a = FpElement::new(&ctx, 7.to_bigint().unwrap());
-    showcase_security(a, "FP");
+    let order = 16.to_biguint().unwrap();
+
+    showcase_security(a, &order, "FP");
 
     let p = 11.to_bigint().unwrap();
     let irreducible_poly = vec![
@@ -116,14 +134,18 @@ fn security_demo() {
 
     let a = FpPolynomialElement::from_vec(&ctx, vec![8, 6, 7, 7, 3, 9, 1]);
 
-    showcase_security(a, "FP POLY");
+    let order = BigUint::from(19487170u32);
+
+    showcase_security(a, &order, "FP POLY");
 
     let irreducible_poly = BigUint::from(0b11111101111101001u64);
     let ctx = FieldContext::new_binary(irreducible_poly);
 
     let a = F2PolynomialElement::new(&ctx, BigUint::from(0b1000101000011101u64));
 
-    showcase_security(a, "F2 POLY");
+    let order = BigUint::from(65535u32);
+
+    showcase_security(a, &order, "F2 POLY");
 }
 
 fn main() {

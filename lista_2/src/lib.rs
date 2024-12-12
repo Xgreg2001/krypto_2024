@@ -21,6 +21,7 @@ pub trait FieldElement<'a>:
     fn is_zero(&self) -> bool;
     fn inverse(&self) -> Self;
     fn pow(&self, exp: &BigUint) -> Self;
+    fn pow_secure(&self, exp: &BigUint, subgroup_order: &BigUint) -> Self;
 }
 
 /// Holds the parameters of the field:
