@@ -173,7 +173,10 @@ fn diffie_hellman_fp() {
     println!("g: {}", g);
     println!("order: {}", order);
 
-    assert_eq!(g.pow(&order), FpElement::new(&ctx, BigInt::one()));
+    assert_eq!(
+        g.pow_secure(&order, &order),
+        FpElement::new(&ctx, BigInt::one())
+    );
 
     // random BigUint number from 2..order
     let mut rng = rand::thread_rng();
@@ -183,14 +186,14 @@ fn diffie_hellman_fp() {
     println!("a: {}", a);
     println!("b: {}", b);
 
-    let a_pub = g.pow(&a);
-    let b_pub = g.pow(&b);
+    let a_pub = g.pow_secure(&a, &order);
+    let b_pub = g.pow_secure(&b, &order);
 
     println!("A pub (g^a): {}", a_pub);
     println!("B pub (g^b): {}", b_pub);
 
-    let a_secret = b_pub.pow(&a);
-    let b_secret = a_pub.pow(&b);
+    let a_secret = b_pub.pow_secure(&a, &order);
+    let b_secret = a_pub.pow_secure(&b, &order);
 
     println!("A (g^(a+b)): {}", a_secret);
     println!("B (g^(a+b)): {}", b_secret);
@@ -228,7 +231,7 @@ fn diffie_hellman_fp_poly() {
     println!("g: {}", g);
     println!("order: {}", order);
 
-    assert_eq!(g.pow(&order), FpPolynomialElement::one(&ctx));
+    assert_eq!(g.pow_secure(&order, &order), FpPolynomialElement::one(&ctx));
 
     // random BigUint number from 2..order
     let mut rng = rand::thread_rng();
@@ -238,14 +241,14 @@ fn diffie_hellman_fp_poly() {
     println!("a: {}", a);
     println!("b: {}", b);
 
-    let a_pub = g.pow(&a);
-    let b_pub = g.pow(&b);
+    let a_pub = g.pow_secure(&a, &order);
+    let b_pub = g.pow_secure(&b, &order);
 
     println!("A pub (g^a): {}", a_pub);
     println!("B pub (g^b): {}", b_pub);
 
-    let a_secret = b_pub.pow(&a);
-    let b_secret = a_pub.pow(&b);
+    let a_secret = b_pub.pow_secure(&a, &order);
+    let b_secret = a_pub.pow_secure(&b, &order);
 
     println!("A (g^(a+b)): {}", a_secret);
     println!("B (g^(a+b)): {}", b_secret);
@@ -265,7 +268,7 @@ fn diffie_hellman_f2_poly() {
     println!("g: {}", g);
     println!("order: {}", order);
 
-    assert_eq!(g.pow(&order), F2PolynomialElement::one(&ctx));
+    assert_eq!(g.pow_secure(&order, &order), F2PolynomialElement::one(&ctx));
 
     // random BigUint number from 2..order
     let mut rng = rand::thread_rng();
@@ -275,14 +278,14 @@ fn diffie_hellman_f2_poly() {
     println!("a: {}", a);
     println!("b: {}", b);
 
-    let a_pub = g.pow(&a);
-    let b_pub = g.pow(&b);
+    let a_pub = g.pow_secure(&a, &order);
+    let b_pub = g.pow_secure(&b, &order);
 
     println!("A pub (g^a): {}", a_pub);
     println!("B pub (g^b): {}", b_pub);
 
-    let a_secret = b_pub.pow(&a);
-    let b_secret = a_pub.pow(&b);
+    let a_secret = b_pub.pow_secure(&a, &order);
+    let b_secret = a_pub.pow_secure(&b, &order);
 
     println!("A (g^(a+b)): {}", a_secret);
     println!("B (g^(a+b)): {}", b_secret);
