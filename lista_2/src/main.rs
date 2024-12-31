@@ -1,12 +1,13 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use clap::{Parser, Subcommand};
 use diffie_hellman::field::f2_poly::F2PolynomialElement;
 use diffie_hellman::field::fp::FpElement;
 use diffie_hellman::field::fp_poly::FpPolynomialElement;
 use diffie_hellman::{FieldContext, FieldElement};
-use num::bigint::{RandBigInt, ToBigInt, ToBigUint};
+use num::bigint::{RandBigInt, Sign, ToBigInt, ToBigUint};
 use num::{BigInt, BigUint, One};
-
-// TODO: fix exponentiation to ensure constant time operation
+use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -25,6 +26,10 @@ enum Commands {
     F2Poly,
     /// Diffie-Hellman key exchange demo using FpPoly field
     FpPoly,
+    /// Validate solution with service provided by the university
+    Validate,
+    /// Submit solution to the service provided by the university
+    Solution,
 }
 
 fn calcualte_average(times: &[std::time::Duration]) -> f64 {
@@ -156,10 +161,551 @@ fn main() {
         Some(Commands::Fp) => diffie_hellman_fp(),
         Some(Commands::F2Poly) => diffie_hellman_f2_poly(),
         Some(Commands::FpPoly) => diffie_hellman_fp_poly(),
+        Some(Commands::Validate) => validate_solution(),
+        Some(Commands::Solution) => submit_solution(),
         None => {
             println!("usege: diffie-hellman [SUBCOMMAND]");
         }
     }
+}
+
+fn submit_solution() {
+    let base_url = "https://crypto24.random-oracle.xyz/";
+    let student_id = "10000000000000000000000000000033";
+    let url = format!("{}submit/list2/{}/solution", base_url, student_id);
+
+    let client = Client::new();
+
+    let response = client.get(&url).send().unwrap();
+
+    if !response.status().is_success() {
+        println!("Failed to fetch challenge");
+        return;
+    } else {
+        println!("Fetched challenge");
+    }
+
+    let response: SubmissionChallengeResponse = response.json().unwrap();
+
+    let session_id = response.session_id;
+
+    println!("Calcualting for modp");
+    let (modp_public, modp_shared) = solution_fp(&response.modp_params, &response.modp_challenge);
+    println!("Calcualting for fpk");
+    let (fpk_public, fpk_shared) = solution_fp_poly(&response.fpk_params, &response.fpk_challenge);
+    println!("Calcualting for f2m");
+    let (f2m_public, f2m_shared) = solution_f2_poly(&response.f2m_params, &response.f2m_challenge);
+
+    let request = SubmissionResponseRequest {
+        session_id: session_id.clone(),
+        modp: ChallangeResponse {
+            status: "success".to_string(),
+            public: modp_public,
+            shared: modp_shared,
+        },
+        fpk: ChallangeFpkResponse {
+            status: "success".to_string(),
+            public: fpk_public,
+            shared: fpk_shared,
+        },
+        f2m: ChallangeResponse {
+            status: "success".to_string(),
+            public: f2m_public,
+            shared: f2m_shared,
+        },
+    };
+
+    println!("Submitting solution");
+
+    let response = client.post(&url).json(&request).send().unwrap();
+
+    println!("Got response");
+
+    if !response.status().is_success() {
+        println!("Failed to submit solution");
+        return;
+    }
+
+    let response: SubmissionResponseResponse = response.json().unwrap();
+
+    if response.modp.status == "success" {
+        println!("Modp solution is correct");
+    } else {
+        println!("Failed modp verification");
+    }
+
+    if response.fpk.status == "success" {
+        println!("Fpk solution is correct");
+    } else {
+        println!("Failed fpk verification");
+    }
+
+    if response.f2m.status == "success" {
+        println!("F2m solution is correct");
+    } else {
+        println!("Failed f2m verification");
+    }
+}
+
+fn solution_f2_poly(params: &F2mParams, challenge: &ChallageRequest) -> (String, String) {
+    let extension = params.extension;
+    let irreducible_poly = decode_base64_biguint_le(&params.modulus);
+
+    // add most significant bit
+    let irreducible_poly = irreducible_poly | (BigUint::one() << extension);
+
+    let g = decode_base64_biguint_le(&params.generator);
+    let order = decode_base64_biguint(&params.order);
+
+    let ctx = FieldContext::new_binary(irreducible_poly);
+    let g = F2PolynomialElement::new(&ctx, g);
+
+    let mut rng = rand::thread_rng();
+    let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
+
+    let a_pub = g.pow(&a);
+
+    let b_pub = decode_base64_biguint_le(&challenge.public);
+    let b_pub = F2PolynomialElement::new(&ctx, b_pub);
+
+    let a_shared = b_pub.pow(&a);
+
+    (
+        encode_base64_biguint_le(&a_pub.coeffs),
+        encode_base64_biguint_le(&a_shared.coeffs),
+    )
+}
+
+fn solution_fp_poly(
+    params: &FpkParams,
+    challenge: &ChallageFpkRequest,
+) -> (Vec<String>, Vec<String>) {
+    let p = decode_base64(&params.prime_base);
+    let mut irreducible_poly = params
+        .modulus
+        .iter()
+        .map(|x| decode_base64(x))
+        .collect::<Vec<BigInt>>();
+
+    // add 1 at the end of vector
+    irreducible_poly.push(BigInt::one());
+
+    let ctx = FieldContext::new_poly(p, irreducible_poly);
+
+    let g = params
+        .generator
+        .iter()
+        .map(|x| FpElement::new(&ctx, decode_base64(x)))
+        .collect::<Vec<FpElement>>();
+
+    let order = decode_base64_biguint(&params.order);
+
+    let g = FpPolynomialElement::new(&ctx, g);
+
+    let mut rng = rand::thread_rng();
+    let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
+
+    let a_pub = g.pow(&a);
+
+    let b_pub = challenge
+        .public
+        .iter()
+        .map(|x| FpElement::new(&ctx, decode_base64(x)))
+        .collect::<Vec<FpElement>>();
+    let b_pub = FpPolynomialElement::new(&ctx, b_pub);
+
+    let a_shared = b_pub.pow(&a);
+
+    (
+        a_pub.coeffs.iter().map(|x| encode_base64(&x.val)).collect(),
+        a_shared
+            .coeffs
+            .iter()
+            .map(|x| encode_base64(&x.val))
+            .collect(),
+    )
+}
+
+fn solution_fp(params: &FpParams, challenge: &ChallageRequest) -> (String, String) {
+    let p = decode_base64(&params.modulus);
+    let g = decode_base64(&params.generator);
+    let order = decode_base64_biguint(&params.order);
+
+    let ctx = FieldContext::new_prime(p.clone());
+    let g = FpElement::new(&ctx, g);
+
+    let mut rng = rand::thread_rng();
+    let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
+
+    let a_pub = g.pow(&a);
+
+    let b_pub = decode_base64(&challenge.public);
+    let b_pub = FpElement::new(&ctx, b_pub);
+
+    let a_shared = b_pub.pow(&a);
+
+    (encode_base64(&a_pub.val), encode_base64(&a_shared.val))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SubmissionChallengeResponse {
+    status: String,
+    session_id: String,
+    timeout: String,
+    modp_params: FpParams,
+    modp_challenge: ChallageRequest,
+    fpk_params: FpkParams,
+    fpk_challenge: ChallageFpkRequest,
+    f2m_params: F2mParams,
+    f2m_challenge: ChallageRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SubmissionResponseRequest {
+    session_id: String,
+    modp: ChallangeResponse,
+    fpk: ChallangeFpkResponse,
+    f2m: ChallangeResponse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Status {
+    status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SubmissionResponseResponse {
+    status: String,
+    modp: Status,
+    fpk: Status,
+    f2m: Status,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ParamFpResponse {
+    status: String,
+    r#type: String,
+    params: FpParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ParamFpkREsponse {
+    status: String,
+    r#type: String,
+    params: FpkParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ParamF2mResponse {
+    status: String,
+    r#type: String,
+    params: F2mParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FpkParams {
+    name: String,
+    prime_base: String,
+    extension: i32,
+    modulus: Vec<String>,
+    generator: Vec<String>,
+    order: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct F2mParams {
+    name: String,
+    modulus: String,
+    generator: String,
+    order: String,
+    extension: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FpParams {
+    name: String,
+    modulus: String,
+    generator: String,
+    order: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ChallageRequest {
+    public: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ChallangeResponse {
+    status: String,
+    public: String,
+    shared: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ChallageFpkRequest {
+    public: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ChallangeFpkResponse {
+    status: String,
+    public: Vec<String>,
+    shared: Vec<String>,
+}
+
+fn validate_solution_fp(base_url: &str, client: &Client) {
+    let params = client
+        .get(format!("{}/validate/list2/modp/param", base_url))
+        .send()
+        .unwrap();
+
+    if !params.status().is_success() {
+        println!("Failed to fetch parameters for F_p");
+        return;
+    }
+
+    let params: ParamFpResponse = params.json().unwrap();
+
+    if params.r#type != "modp" {
+        println!("Invalid type of parameters");
+        return;
+    }
+
+    let p = decode_base64(&params.params.modulus);
+    let g = decode_base64(&params.params.generator);
+    let order = decode_base64_biguint(&params.params.order);
+
+    let ctx = FieldContext::new_prime(p.clone());
+    let g = FpElement::new(&ctx, g);
+
+    let mut rng = rand::thread_rng();
+    let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
+
+    let a_pub = g.pow(&a);
+
+    let challange = ChallageRequest {
+        public: encode_base64(&a_pub.val),
+    };
+
+    let challange = client
+        .post(format!("{}/validate/list2/modp/challenge", base_url))
+        .json(&challange)
+        .send()
+        .unwrap();
+
+    if !challange.status().is_success() {
+        println!("Failed to send challange");
+        return;
+    }
+
+    let challange: ChallangeResponse = challange.json().unwrap();
+
+    let b_pub = decode_base64(&challange.public);
+    let b_pub = FpElement::new(&ctx, b_pub);
+    let b_shared = decode_base64(&challange.shared);
+    let b_shared = FpElement::new(&ctx, b_shared);
+
+    let a_shared = b_pub.pow(&a);
+
+    assert_eq!(a_shared, b_shared);
+
+    println!("Fp Solution is correct");
+}
+
+fn validate_solution() {
+    let base_url = "https://crypto24.random-oracle.xyz/";
+    let client = Client::new();
+
+    validate_solution_fp(base_url, &client);
+    validate_solution_f2_poly(base_url, &client);
+    validate_solution_fp_poly(base_url, &client);
+}
+
+fn validate_solution_fp_poly(base_url: &str, client: &Client) {
+    let params = client
+        .get(format!("{}/validate/list2/fpk/param", base_url))
+        .send()
+        .unwrap();
+
+    if !params.status().is_success() {
+        println!("Failed to fetch parameters for F_p^k");
+        return;
+    }
+
+    let params: ParamFpkREsponse = params.json().unwrap();
+
+    if params.r#type != "fpk" {
+        println!("Invalid type of parameters");
+        return;
+    }
+
+    // let extension = params.params.extension;
+
+    let p = decode_base64(&params.params.prime_base);
+    let mut irreducible_poly = params
+        .params
+        .modulus
+        .iter()
+        .map(|x| decode_base64(x))
+        .collect::<Vec<BigInt>>();
+
+    // add 1 at the end of vector
+    irreducible_poly.push(BigInt::one());
+
+    let ctx = FieldContext::new_poly(p, irreducible_poly);
+
+    let g = params
+        .params
+        .generator
+        .iter()
+        .map(|x| FpElement::new(&ctx, decode_base64(x)))
+        .collect::<Vec<FpElement>>();
+
+    let order = decode_base64_biguint(&params.params.order);
+
+    let g = FpPolynomialElement::new(&ctx, g);
+
+    let mut rng = rand::thread_rng();
+    let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
+
+    let a_pub = g.pow(&a);
+
+    let challange = ChallageFpkRequest {
+        public: a_pub.coeffs.iter().map(|x| encode_base64(&x.val)).collect(),
+    };
+
+    let challange = client
+        .post(format!("{}/validate/list2/fpk/challenge", base_url))
+        .json(&challange)
+        .send()
+        .unwrap();
+
+    if !challange.status().is_success() {
+        println!("Failed to send challange");
+        println!("{:?}", challange.text());
+        return;
+    }
+
+    let challange: ChallangeFpkResponse = challange.json().unwrap();
+
+    let b_pub = challange
+        .public
+        .iter()
+        .map(|x| FpElement::new(&ctx, decode_base64(x)))
+        .collect::<Vec<FpElement>>();
+    let b_pub = FpPolynomialElement::new(&ctx, b_pub);
+    let b_shared = challange
+        .shared
+        .iter()
+        .map(|x| FpElement::new(&ctx, decode_base64(x)))
+        .collect::<Vec<FpElement>>();
+    let b_shared = FpPolynomialElement::new(&ctx, b_shared);
+
+    let a_shared = b_pub.pow(&a);
+
+    assert_eq!(a_shared, b_shared);
+
+    println!("Fpk Solution is correct");
+}
+
+fn validate_solution_f2_poly(base_url: &str, client: &Client) {
+    let params = client
+        .get(format!("{}/validate/list2/f2m/param", base_url))
+        .send()
+        .unwrap();
+
+    if !params.status().is_success() {
+        println!("Failed to fetch parameters for F_2^m");
+        return;
+    }
+
+    let params: ParamF2mResponse = params.json().unwrap();
+
+    if params.r#type != "f2m" {
+        println!("Invalid type of parameters");
+        return;
+    }
+
+    let extension = params.params.extension;
+    let irreducible_poly = decode_base64_biguint_le(&params.params.modulus);
+
+    // add most significant bit
+    let irreducible_poly = irreducible_poly | (BigUint::one() << extension);
+
+    let g = decode_base64_biguint_le(&params.params.generator);
+    let order = decode_base64_biguint(&params.params.order);
+
+    let ctx = FieldContext::new_binary(irreducible_poly);
+    let g = F2PolynomialElement::new(&ctx, g);
+
+    let mut rng = rand::thread_rng();
+    let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
+
+    let a_pub = g.pow(&a);
+
+    let challange = ChallageRequest {
+        public: encode_base64_biguint_le(&a_pub.coeffs),
+    };
+
+    let challange = client
+        .post(format!("{}/validate/list2/f2m/challenge", base_url))
+        .json(&challange)
+        .send()
+        .unwrap();
+
+    if !challange.status().is_success() {
+        println!("Failed to send challange");
+        println!("{:?}", challange.text());
+        return;
+    }
+
+    let challange: ChallangeResponse = challange.json().unwrap();
+
+    let b_pub = decode_base64_biguint_le(&challange.public);
+    let b_pub = F2PolynomialElement::new(&ctx, b_pub);
+    let b_shared = decode_base64_biguint_le(&challange.shared);
+    let b_shared = F2PolynomialElement::new(&ctx, b_shared);
+
+    let a_shared = b_pub.pow(&a);
+
+    assert_eq!(a_shared, b_shared);
+
+    println!("F2m Solution is correct");
+}
+
+fn decode_base64(s: &str) -> BigInt {
+    let s = URL_SAFE_NO_PAD.decode(s.as_bytes()).unwrap();
+    BigInt::from_bytes_be(Sign::Plus, &s)
+}
+
+fn decode_base64_biguint(s: &str) -> BigUint {
+    let s = URL_SAFE_NO_PAD.decode(s.as_bytes()).unwrap();
+    BigUint::from_bytes_be(&s)
+}
+
+fn decode_base64_biguint_le(s: &str) -> BigUint {
+    let s = URL_SAFE_NO_PAD.decode(s.as_bytes()).unwrap();
+    BigUint::from_bytes_le(&s)
+}
+
+fn encode_base64(n: &BigInt) -> String {
+    let (_, bytes) = n.to_bytes_be();
+    URL_SAFE_NO_PAD.encode(&bytes)
+}
+
+// fn encode_base64_le(n: &BigInt) -> String {
+//     let (_, bytes) = n.to_bytes_le();
+//     URL_SAFE_NO_PAD.encode(&bytes)
+// }
+
+// fn encode_base64_biguint(n: &BigUint) -> String {
+//     let bytes = n.to_bytes_be();
+//     URL_SAFE_NO_PAD.encode(&bytes)
+// }
+
+fn encode_base64_biguint_le(n: &BigUint) -> String {
+    let bytes = n.to_bytes_le();
+    URL_SAFE_NO_PAD.encode(&bytes)
 }
 
 fn diffie_hellman_fp() {

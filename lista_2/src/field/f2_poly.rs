@@ -11,7 +11,7 @@ use crate::{get_binary_poly_degree, FieldContext, FieldElement};
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct F2PolynomialElement<'a> {
     context: &'a FieldContext,
-    coeffs: BigUint,
+    pub coeffs: BigUint,
 }
 
 impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {

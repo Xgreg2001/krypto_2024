@@ -10,7 +10,7 @@ use crate::{FieldContext, FieldElement};
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FpPolynomialElement<'a> {
     context: &'a FieldContext,
-    coeffs: Vec<FpElement<'a>>,
+    pub coeffs: Vec<FpElement<'a>>,
 }
 
 impl fmt::Display for FpPolynomialElement<'_> {
