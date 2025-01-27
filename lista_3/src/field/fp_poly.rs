@@ -75,6 +75,10 @@ impl<'a> FpPolynomialElement<'a> {
             self.coeffs.push(FpElement::zero(self.context));
         }
         self.coeffs = Self::poly_mod(&self.coeffs, self.context);
+        // Remove leading zeross
+        while self.coeffs.len() > 1 && self.coeffs.last().unwrap().is_zero() {
+            self.coeffs.pop();
+        }
     }
 
     fn poly_to_fp<'b>(context: &'b FieldContext, poly: &[BigInt]) -> Vec<FpElement<'b>> {
@@ -227,6 +231,10 @@ impl<'a> FpPolynomialElement<'a> {
         let inv_lead = r0.last().unwrap().inverse();
         let inv = Self::poly_mul(ctx, &t0, &[inv_lead]);
         Self::poly_mod(&inv, ctx)
+    }
+
+    pub(crate) fn from_fp(ctx: &'a FieldContext, fp: FpElement<'a>) -> FpPolynomialElement<'a> {
+        FpPolynomialElement::new(ctx, vec![fp])
     }
 }
 
@@ -398,9 +406,7 @@ impl<'a> FieldElement<'a> for FpPolynomialElement<'a> {
     }
 
     fn one(ctx: &'a FieldContext) -> Self {
-        let k = ctx.get_irreducible_poly_degree();
-        let mut coeffs = vec![FpElement::zero(ctx); k];
-        coeffs[0] = FpElement::one(ctx);
+        let coeffs = vec![FpElement::one(ctx)];
         FpPolynomialElement {
             context: ctx,
             coeffs,
