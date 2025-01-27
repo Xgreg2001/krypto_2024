@@ -84,6 +84,78 @@ operations3 = [
 print("\n=== Test Case 3: Edge Cases over F_7[x]/(x^2 + x + 3) ===")
 print_curve_info(E3, [P1, P2, P3], operations3, is_poly=True)
 
+print("\n=== Test Case 4: Binary Curve over F_2[x]/(x^4 + x + 1) ===")
+# Create binary field F_2[x]/(x^4 + x + 1)
+p = 2
+R.<x> = PolynomialRing(GF(p))
+poly = x^4 + x + 1
+F2_4 = GF(2^4, modulus=poly, name='a')
+
+# Create binary curve y^2 + xy = x^3 + x^2 + 1 (a=1, b=1)
+# For binary curves, we use the Weierstrass form:
+# y^2 + a1*x*y + a3*y = x^3 + a2*x^2 + a4*x + a6
+# where our curve y^2 + xy = x^3 + x^2 + 1 corresponds to:
+# a1=1, a2=1, a3=0, a4=0, a6=1
+E4 = EllipticCurve(F2_4, [1,1,0,0,1])
+
+print(f"Field polynomial: {poly}")
+print("Curve equation: y^2 + xy = x^3 + x^2 + 1")
+print(f"Curve order: {E4.order()}")
+
+points4 = E4.points()
+P1 = points4[1]  # First non-infinity point
+P2 = points4[2]  # Second point
+
+print("\nTest Points:")
+for i, P in enumerate([P1, P2]):
+    print(f"P{i+1} = ({P[0].polynomial()}, {P[1].polynomial()})")
+
+operations4 = [
+    ("2*P1", 2*P1),
+    ("P1 + P2", P1 + P2),
+    ("3*P1", 3*P1)
+]
+
+print("\nOperations:")
+for op, result in operations4:
+    if result:
+        print(f"{op} = ({result[0].polynomial()}, {result[1].polynomial()})")
+    else:
+        print(f"{op} = infinity")
+
+# Test Case 5: Binary Curve over F_2[x]/(x^3 + x + 1)
+print("\n=== Test Case 5: Binary Curve over F_2[x]/(x^3 + x + 1) ===")
+poly = x^3 + x + 1
+F2_3 = GF(2^3, modulus=poly, name='a')
+
+# Create binary curve y^2 + xy = x^3 + 1 (a=0, b=1)
+# In Weierstrass form: y^2 + xy = x^3 + 1
+# a1=1, a2=0, a3=0, a4=0, a6=1
+E5 = EllipticCurve(F2_3, [1,0,0,0,1])
+
+print(f"Field polynomial: {poly}")
+print("Curve equation: y^2 + xy = x^3 + 1")
+print(f"Curve order: {E5.order()}")
+
+points5 = E5.points()
+P1 = points5[1]  # First non-infinity point
+
+print("\nTest Points:")
+print(f"P1 = ({P1[0].polynomial()}, {P1[1].polynomial()})")
+
+operations5 = [
+    ("2*P1", 2*P1),
+    ("3*P1", 3*P1),
+    ("7*P1", 7*P1)  # Should be infinity as order is 7
+]
+
+print("\nOperations:")
+for op, result in operations5:
+    if result:
+        print(f"{op} = ({result[0].polynomial()}, {result[1].polynomial()})")
+    else:
+        print(f"{op} = infinity")
+
 # Print polynomial representation helper
 print("\nPolynomial Representations:")
 print("For F_23[x]/(x^2 + 1):")
