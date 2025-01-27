@@ -68,14 +68,14 @@ impl FieldContext {
     }
 
     pub fn is_poly(&self) -> bool {
-        self.irreducible_poly.len() > 0
+        !self.irreducible_poly.is_empty()
     }
 
     fn get_irreducible_poly_degree(&self) -> usize {
         if self.is_binary() {
             get_binary_poly_degree(&self.irreducible_binary_poly)
         } else {
-            return self.irreducible_poly.len() - 1;
+            self.irreducible_poly.len() - 1
         }
     }
 }

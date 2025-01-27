@@ -16,31 +16,30 @@ pub struct F2PolynomialElement<'a> {
 
 impl<'a> FieldElement<'a> for F2PolynomialElement<'a> {
     fn zero(ctx: &'a FieldContext) -> Self {
-        return F2PolynomialElement {
+        F2PolynomialElement {
             context: ctx,
             coeffs: BigUint::zero(),
-        };
+        }
     }
 
     fn one(ctx: &'a FieldContext) -> Self {
-        return F2PolynomialElement {
+        F2PolynomialElement {
             context: ctx,
             coeffs: BigUint::one(),
-        };
+        }
     }
 
     fn is_zero(&self) -> bool {
-        return self.coeffs.is_zero();
+        self.coeffs.is_zero()
     }
 
     fn inverse(&self) -> Self {
         let ctx = self.context;
         let inv_poly = Self::poly_inv(ctx, &self.coeffs).unwrap();
-        let res = F2PolynomialElement {
+        F2PolynomialElement {
             context: ctx,
             coeffs: Self::poly_mod(ctx, &inv_poly),
-        };
-        res
+        }
     }
 
     fn pow(&self, exp: &BigUint) -> Self {
@@ -111,14 +110,14 @@ impl<'a> Display for F2PolynomialElement<'a> {
 impl<'a> F2PolynomialElement<'a> {
     pub fn new(ctx: &'a FieldContext, coeffs: BigUint) -> Self {
         assert!(ctx.is_binary());
-        return F2PolynomialElement {
+        F2PolynomialElement {
             context: ctx,
             coeffs,
-        };
+        }
     }
 
     fn poly_add(a: &BigUint, b: &BigUint) -> BigUint {
-        return a ^ b;
+        a ^ b
     }
 
     fn poly_extended_gcd(a: &BigUint, b: &BigUint) -> (BigUint, BigUint, BigUint) {
@@ -233,11 +232,10 @@ impl<'a> Add for F2PolynomialElement<'a> {
     fn add(self, rhs: Self) -> Self::Output {
         let ctx = self.context;
         let added = Self::poly_add(&self.coeffs, &rhs.coeffs);
-        let res = F2PolynomialElement {
+        F2PolynomialElement {
             context: ctx,
             coeffs: Self::poly_mod(ctx, &added),
-        };
-        res
+        }
     }
 }
 
@@ -247,27 +245,28 @@ impl<'a> Add for &F2PolynomialElement<'a> {
     fn add(self, rhs: Self) -> Self::Output {
         let ctx = self.context;
         let added = F2PolynomialElement::poly_add(&self.coeffs, &rhs.coeffs);
-        let res = F2PolynomialElement {
+        F2PolynomialElement {
             context: ctx,
             coeffs: F2PolynomialElement::poly_mod(ctx, &added),
-        };
-        res
+        }
     }
 }
 
 impl<'a> Sub for F2PolynomialElement<'a> {
     type Output = Self;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Self) -> Self::Output {
-        return self + rhs;
+        self + rhs
     }
 }
 
 impl<'a> Sub for &F2PolynomialElement<'a> {
     type Output = F2PolynomialElement<'a>;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Self) -> Self::Output {
-        return self + rhs;
+        self + rhs
     }
 }
 
@@ -275,7 +274,7 @@ impl<'a> Neg for F2PolynomialElement<'a> {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        return self;
+        self
     }
 }
 
@@ -283,7 +282,7 @@ impl<'a> Neg for &F2PolynomialElement<'a> {
     type Output = F2PolynomialElement<'a>;
 
     fn neg(self) -> Self::Output {
-        return self.clone();
+        self.clone()
     }
 }
 
@@ -293,11 +292,11 @@ impl<'a> Mul for F2PolynomialElement<'a> {
     fn mul(self, rhs: Self) -> Self::Output {
         let ctx = self.context;
         let mult = Self::poly_mul(&self.coeffs, &rhs.coeffs);
-        let res = F2PolynomialElement {
+
+        F2PolynomialElement {
             context: ctx,
             coeffs: Self::poly_mod(ctx, &mult),
-        };
-        res
+        }
     }
 }
 
@@ -307,27 +306,29 @@ impl<'a> Mul for &F2PolynomialElement<'a> {
     fn mul(self, rhs: Self) -> Self::Output {
         let ctx = self.context;
         let mult = F2PolynomialElement::poly_mul(&self.coeffs, &rhs.coeffs);
-        let res = F2PolynomialElement {
+
+        F2PolynomialElement {
             context: ctx,
             coeffs: F2PolynomialElement::poly_mod(ctx, &mult),
-        };
-        res
+        }
     }
 }
 
 impl<'a> Div for F2PolynomialElement<'a> {
     type Output = Self;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self::Output {
-        return self * rhs.inverse();
+        self * rhs.inverse()
     }
 }
 
 impl<'a> Div for &F2PolynomialElement<'a> {
     type Output = F2PolynomialElement<'a>;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self::Output {
-        return self * &F2PolynomialElement::inverse(rhs);
+        self * &F2PolynomialElement::inverse(rhs)
     }
 }
 

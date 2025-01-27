@@ -132,6 +132,8 @@ impl<'a> Mul for &FpElement<'a> {
 
 impl<'a> Div for FpElement<'a> {
     type Output = FpElement<'a>;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: FpElement<'a>) -> FpElement<'a> {
         self * other.inverse()
     }
@@ -139,6 +141,8 @@ impl<'a> Div for FpElement<'a> {
 
 impl<'a> Div for &FpElement<'a> {
     type Output = FpElement<'a>;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: &FpElement<'a>) -> FpElement<'a> {
         let inv = other.inverse();
         self * &inv

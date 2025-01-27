@@ -371,6 +371,8 @@ impl<'a> Mul for &FpPolynomialElement<'a> {
 
 impl<'a> Div for FpPolynomialElement<'a> {
     type Output = FpPolynomialElement<'a>;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
         self * other.inverse()
     }
@@ -378,6 +380,8 @@ impl<'a> Div for FpPolynomialElement<'a> {
 
 impl<'a> Div for &FpPolynomialElement<'a> {
     type Output = FpPolynomialElement<'a>;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: &FpPolynomialElement<'a>) -> FpPolynomialElement<'a> {
         self * &FpPolynomialElement::inverse(other)
     }
