@@ -314,6 +314,12 @@ struct PointECpkParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct SignatureECpk {
+    s: Vec<String>,
+    e: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PointParams {
     x: String,
     y: String,
@@ -358,6 +364,13 @@ struct SignatureRequest {
 struct SignatureResponse {
     status: String,
     public: PointParams,
+    signature: Signature,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SignatureECpkResponse {
+    status: String,
+    public: PointECpkParams,
     signature: Signature,
 }
 
@@ -586,6 +599,7 @@ fn validate_solution_ecpk(base_url: &str, client: &Client) {
 
     let g = Point::Affine { x: g_x, y: g_y };
 
+    // DH part
     let mut rng = rand::thread_rng();
     let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
 
@@ -664,6 +678,76 @@ fn validate_solution_ecpk(base_url: &str, client: &Client) {
             panic!("Expected affine point");
         }
     }
+
+    // SCHNORR part
+    let message = "string";
+
+    let signature_req = SignatureRequest {
+        message: message.to_string(),
+    };
+
+    let signature_resp = client
+        .post(format!("{}/validate/list3/ecpk/schnorr/sign", base_url))
+        .json(&signature_req)
+        .send()
+        .unwrap();
+
+    if !signature_resp.status().is_success() {
+        println!("Failed to send request for signature");
+        return;
+    }
+
+    let signature_resp: SignatureECpkResponse = signature_resp.json().unwrap();
+
+    let pub_x = signature_resp
+        .public
+        .x
+        .iter()
+        .map(|x| FpElement::new(&ctx, decode_base64(x)))
+        .collect::<Vec<FpElement>>();
+    let pub_x = FpPolynomialElement::new(&ctx, pub_x);
+
+    let pub_y = signature_resp
+        .public
+        .y
+        .iter()
+        .map(|x| FpElement::new(&ctx, decode_base64(x)))
+        .collect::<Vec<FpElement>>();
+    let pub_y = FpPolynomialElement::new(&ctx, pub_y);
+
+    let pub_key = Point::Affine { x: pub_x, y: pub_y };
+
+    let s = decode_base64_biguint(&signature_resp.signature.s);
+    let e = decode_base64_biguint(&signature_resp.signature.e);
+
+    let g_s = curve.mul(&s, &g);
+    let y_e = curve.mul(&e, &pub_key);
+
+    let r_v = curve.add(&g_s, &y_e);
+
+    match r_v {
+        Point::Affine { x, y } => {
+            let r_v = PointECpkParams {
+                x: x.coeffs.iter().map(|x| encode_base64(&x.val)).collect(),
+                y: y.coeffs.iter().map(|x| encode_base64(&x.val)).collect(),
+            };
+
+            let r_v = serde_json::to_string(&r_v).unwrap();
+
+            let r_v_message = format!("{}{}", r_v, message);
+
+            let e_v = Sha256::digest(r_v_message.as_bytes()).to_vec();
+
+            let e_v = BigUint::from_bytes_be(&e_v);
+
+            if e_v == e {
+                println!("EC_p^k Schnorr Signature is correct");
+            } else {
+                println!("EC_p^k Schnorr Signature is incorrect");
+            }
+        }
+        _ => panic!("Expected affine point"),
+    }
 }
 
 fn validate_solution_f2_poly(base_url: &str, client: &Client) {
@@ -696,7 +780,7 @@ fn validate_solution_f2_poly(base_url: &str, client: &Client) {
     let b_param = decode_base64_biguint_le(&params.params.b);
     let order = decode_base64_biguint(&params.params.order);
 
-    let ctx = FieldContext::new_binary(irreducible_poly);
+    let ctx = FieldContext::new_binary(irreducible_poly.clone());
     let curve = BinaryEllipticCurve::new(
         F2PolynomialElement::new(&ctx, a_param),
         F2PolynomialElement::new(&ctx, b_param),
@@ -704,10 +788,11 @@ fn validate_solution_f2_poly(base_url: &str, client: &Client) {
     );
 
     let g = BinaryPoint::Affine {
-        x: F2PolynomialElement::new(&ctx, g_x),
-        y: F2PolynomialElement::new(&ctx, g_y),
+        x: F2PolynomialElement::new(&ctx, g_x.clone()),
+        y: F2PolynomialElement::new(&ctx, g_y.clone()),
     };
 
+    // DH part
     let mut rng = rand::thread_rng();
     let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
 
@@ -759,6 +844,68 @@ fn validate_solution_f2_poly(base_url: &str, client: &Client) {
         _ => {
             panic!("Expected affine point");
         }
+    }
+
+    // SCHNORR part
+    let message = "string";
+
+    let signature_req = SignatureRequest {
+        message: message.to_string(),
+    };
+
+    let signature_resp = client
+        .post(format!("{}/validate/list3/ec2m/schnorr/sign", base_url))
+        .json(&signature_req)
+        .send()
+        .unwrap();
+
+    if !signature_resp.status().is_success() {
+        println!(
+            "Failed to send request for signature. Status: {}",
+            signature_resp.status()
+        );
+        return;
+    }
+
+    let signature_resp: SignatureResponse = signature_resp.json().unwrap();
+
+    let pub_x = decode_base64_biguint_le(&signature_resp.public.x);
+    let pub_y = decode_base64_biguint_le(&signature_resp.public.y);
+
+    let pub_key = BinaryPoint::Affine {
+        x: F2PolynomialElement::new(&ctx, pub_x),
+        y: F2PolynomialElement::new(&ctx, pub_y),
+    };
+
+    let s = decode_base64_biguint(&signature_resp.signature.s);
+    let e = decode_base64_biguint(&signature_resp.signature.e);
+
+    let g_s = curve.mul(&s, &g);
+    let y_e = curve.mul(&e, &pub_key);
+
+    let r_v = curve.add(&g_s, &y_e);
+
+    match r_v {
+        BinaryPoint::Affine { x, y } => {
+            let r_v = PointParams {
+                x: encode_base64_biguint_le(&x.coeffs),
+                y: encode_base64_biguint_le(&y.coeffs),
+            };
+
+            let r_v_str = serde_json::to_string(&r_v).unwrap();
+
+            let r_v_message = format!("{}{}", r_v_str, message);
+
+            let e_v = Sha256::digest(r_v_message.as_bytes()).to_vec();
+            let e_v = BigUint::from_bytes_be(&e_v);
+
+            if e_v == e {
+                println!("EC_2^m Schnorr Signature is correct");
+            } else {
+                println!("EC_2^m Schnorr Signature is incorrect");
+            }
+        }
+        _ => panic!("Expected affine point"),
     }
 }
 
