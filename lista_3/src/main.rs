@@ -7,9 +7,11 @@ use diffie_hellman::field::fp::FpElement;
 use diffie_hellman::field::fp_poly::FpPolynomialElement;
 use diffie_hellman::{FieldContext, FieldElement};
 use num::bigint::{RandBigInt, Sign, ToBigInt};
+use num::traits::sign;
 use num::{BigInt, BigUint, One};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -318,6 +320,12 @@ struct PointParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct Signature {
+    s: String,
+    e: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ChallageRequest {
     public: PointParams,
 }
@@ -339,6 +347,27 @@ struct ChallangeECpkResponse {
     status: String,
     public: PointECpkParams,
     shared: PointECpkParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SignatureRequest {
+    message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SignatureResponse {
+    status: String,
+    public: PointParams,
+    signature: Signature,
+}
+
+fn validate_solution() {
+    let base_url = "https://crypto24.random-oracle.xyz";
+    let client = Client::new();
+
+    validate_solution_ecp(base_url, &client);
+    validate_solution_f2_poly(base_url, &client);
+    validate_solution_ecpk(base_url, &client);
 }
 
 fn validate_solution_ecp(base_url: &str, client: &Client) {
@@ -373,6 +402,7 @@ fn validate_solution_ecp(base_url: &str, client: &Client) {
     let curve = EllipticCurve::new(a, b, &ctx);
     let g = curve.point(x, y);
 
+    // DH part
     let mut rng = rand::thread_rng();
     let a = rng.gen_biguint_range(&BigUint::from(2u32), &order);
 
@@ -423,15 +453,66 @@ fn validate_solution_ecp(base_url: &str, client: &Client) {
             panic!("Expected affine point");
         }
     }
-}
 
-fn validate_solution() {
-    let base_url = "https://crypto24.random-oracle.xyz";
-    let client = Client::new();
+    // SCHNORR part
+    let message = "string";
 
-    validate_solution_ecp(base_url, &client);
-    validate_solution_f2_poly(base_url, &client);
-    validate_solution_ecpk(base_url, &client);
+    let signature_req = SignatureRequest {
+        message: message.to_string(),
+    };
+
+    let signature_resp = client
+        .post(format!("{}/validate/list3/ecp/schnorr/sign", base_url))
+        .json(&signature_req)
+        .send()
+        .unwrap();
+
+    if !signature_resp.status().is_success() {
+        println!("Failed to send request for signature");
+        return;
+    }
+
+    let signature_resp: SignatureResponse = signature_resp.json().unwrap();
+
+    let pub_x = decode_base64(&signature_resp.public.x);
+    let pub_y = decode_base64(&signature_resp.public.y);
+
+    let pub_key = curve.point(pub_x, pub_y);
+
+    let s = decode_base64_biguint(&signature_resp.signature.s);
+    let e = decode_base64_biguint(&signature_resp.signature.e);
+
+    let g_s = curve.mul(&s, &g);
+    let y_e = curve.mul(&e, &pub_key);
+
+    let r_v = curve.add(&g_s, &y_e);
+
+    match r_v {
+        Point::Affine { x, y } => {
+            assert_eq!(x.coeffs.len(), 1);
+            assert_eq!(y.coeffs.len(), 1);
+
+            let r_v = PointParams {
+                x: encode_base64(&x.coeffs[0].val),
+                y: encode_base64(&y.coeffs[0].val),
+            };
+
+            let r_v = serde_json::to_string(&r_v).unwrap();
+
+            let r_v_message = format!("{}{}", r_v, message);
+
+            let e_v = Sha256::digest(r_v_message.as_bytes()).to_vec();
+
+            let e_v = BigUint::from_bytes_be(&e_v);
+
+            if e_v == e {
+                println!("EC_p Schnorr Signature is correct");
+            } else {
+                println!("EC_p Schnorr Signature is incorrect");
+            }
+        }
+        _ => panic!("Expected affine point"),
+    }
 }
 
 fn validate_solution_ecpk(base_url: &str, client: &Client) {
@@ -451,8 +532,6 @@ fn validate_solution_ecpk(base_url: &str, client: &Client) {
         println!("Invalid type of parameters");
         return;
     }
-
-    // let extension = params.params.extension;
 
     let p = decode_base64(&params.params.prime_base);
     let mut irreducible_poly = params

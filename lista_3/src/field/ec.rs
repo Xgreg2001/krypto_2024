@@ -1,10 +1,17 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use num::bigint::Sign;
 use std::fmt::Display;
 
-use num::{BigUint, One, Zero};
+use serde_json;
+
+use num::{BigInt, BigUint, One, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::field::fp::FpElement;
 use crate::field::fp_poly::FpPolynomialElement;
 use crate::{FieldContext, FieldElement};
+
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EllipticCurve<'a> {
@@ -21,6 +28,12 @@ pub enum Point<'a> {
         x: FpPolynomialElement<'a>,
         y: FpPolynomialElement<'a>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PointStrJson {
+    x: String,
+    y: String,
 }
 
 impl<'a> EllipticCurve<'a> {
@@ -127,29 +140,54 @@ impl<'a> EllipticCurve<'a> {
         result
     }
 
-    pub fn mul_secure(&self, k: &BigUint, point: &Point<'a>, order: &BigUint) -> Point<'a> {
-        let mut result = Point::Infinity;
-        let mut dummy = Point::Infinity;
-        let mut temp = point.clone();
-        let k = k % order;
-
-        for i in 0..order.bits() {
-            if ((&k >> i) & BigUint::one()) == BigUint::one() {
-                result = self.add(&result, &temp);
-            } else {
-                dummy = self.add(&dummy, &temp);
-            }
-            temp = self.double(&temp);
-        }
-        result
-    }
-
     pub fn point(&self, x: num::BigInt, y: num::BigInt) -> Point<'a> {
         Point::Affine {
             x: FpPolynomialElement::from_fp(self.ctx, FpElement::new(self.ctx, x)),
             y: FpPolynomialElement::from_fp(self.ctx, FpElement::new(self.ctx, y)),
         }
     }
+
+    pub fn schnorr_ecfp_verify(
+        &self,
+        g: &Point<'a>,
+        pub_key: &Point<'a>,
+        message: &str,
+        s: BigUint,
+        e: BigUint,
+    ) -> bool {
+        let g_s = self.mul(&s, g);
+        let y_e = self.mul(&e, pub_key);
+
+        let r_v = self.add(&g_s, &y_e);
+
+        match r_v {
+            Point::Affine { x, y } => {
+                assert_eq!(x.coeffs.len(), 1);
+                assert_eq!(y.coeffs.len(), 1);
+
+                let r_v = PointStrJson {
+                    x: encode_base64(&x.coeffs[0].val),
+                    y: encode_base64(&y.coeffs[0].val),
+                };
+
+                let r_v = serde_json::to_string(&r_v).unwrap();
+
+                let r_v_message = format!("{}{}", r_v, message);
+
+                let e_v = Sha256::digest(r_v_message.as_bytes()).to_vec();
+
+                let e_v = BigUint::from_bytes_be(&e_v);
+
+                e_v == e
+            }
+            _ => panic!("Expected affine point"),
+        }
+    }
+}
+
+fn encode_base64(n: &BigInt) -> String {
+    let (_, bytes) = n.to_bytes_be();
+    URL_SAFE_NO_PAD.encode(&bytes)
 }
 
 impl<'a> Display for Point<'a> {
