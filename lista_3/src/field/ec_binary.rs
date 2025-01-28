@@ -67,7 +67,7 @@ impl<'a> BinaryEllipticCurve<'a> {
                 let x_r = &(&lambda2 + &lambda) + &self.a;
 
                 // y_r = x^2 + λx_r + x_r
-                let x2 = x.pow(&2u32.into());
+                let x2 = x * x;
                 let y_r = &(&x2 + &(&lambda * &x_r)) + &x_r;
 
                 BinaryPoint::Affine { x: x_r, y: y_r }
@@ -115,28 +115,6 @@ impl<'a> BinaryEllipticCurve<'a> {
             }
             temp = self.double(&temp);
             k >>= 1;
-        }
-        result
-    }
-
-    pub fn mul_secure(
-        &self,
-        k: &BigUint,
-        point: &BinaryPoint<'a>,
-        order: &BigUint,
-    ) -> BinaryPoint<'a> {
-        let mut result = BinaryPoint::Infinity;
-        let mut dummy = BinaryPoint::Infinity;
-        let mut temp = point.clone();
-        let k = k % order;
-
-        for i in 0..order.bits() {
-            if ((&k >> i) & BigUint::one()) == BigUint::one() {
-                result = self.add(&result, &temp);
-            } else {
-                dummy = self.add(&dummy, &temp);
-            }
-            temp = self.double(&temp);
         }
         result
     }

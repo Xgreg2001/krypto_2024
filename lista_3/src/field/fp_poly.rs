@@ -233,7 +233,7 @@ impl<'a> FpPolynomialElement<'a> {
         Self::poly_mod(&inv, ctx)
     }
 
-    pub(crate) fn from_fp(ctx: &'a FieldContext, fp: FpElement<'a>) -> FpPolynomialElement<'a> {
+    pub fn from_fp(ctx: &'a FieldContext, fp: FpElement<'a>) -> FpPolynomialElement<'a> {
         FpPolynomialElement::new(ctx, vec![fp])
     }
 }

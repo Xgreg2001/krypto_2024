@@ -66,16 +66,9 @@ impl<'a> EllipticCurve<'a> {
                 }
 
                 // λ = (3x^2 + a)/(2y)
-                // let ctx = self.ctx;
-                // let two = FpPolynomialElement::from_fp(ctx, FpElement::new(ctx, 2.into()));
-                // let three = FpPolynomialElement::from_fp(ctx, FpElement::new(ctx, 3.into()));
-
                 let x2 = x * x;
                 let numerator = &(&x2 + &x2 + x2) + &self.a;
                 let denominator = y + y;
-
-                println!("numerator: {:?}", numerator);
-                println!("denominator: {:?}", denominator);
 
                 let lambda = &numerator / &denominator;
 
@@ -150,6 +143,13 @@ impl<'a> EllipticCurve<'a> {
         }
         result
     }
+
+    pub fn point(&self, x: num::BigInt, y: num::BigInt) -> Point<'a> {
+        Point::Affine {
+            x: FpPolynomialElement::from_fp(self.ctx, FpElement::new(self.ctx, x)),
+            y: FpPolynomialElement::from_fp(self.ctx, FpElement::new(self.ctx, y)),
+        }
+    }
 }
 
 impl<'a> Display for Point<'a> {
@@ -184,14 +184,8 @@ mod tests {
         let curve = EllipticCurve::new(a, b, &ctx);
 
         // Points from SageMath output
-        let p1 = Point::Affine {
-            x: FpPolynomialElement::from_vec(&ctx, vec![0]),
-            y: FpPolynomialElement::from_vec(&ctx, vec![7]),
-        };
-        let p2 = Point::Affine {
-            x: FpPolynomialElement::from_vec(&ctx, vec![0]),
-            y: FpPolynomialElement::from_vec(&ctx, vec![16]),
-        };
+        let p1 = curve.point(0.into(), 7.into());
+        let p2 = curve.point(0.into(), 16.into());
 
         // Verify operations
         let double_p1 = curve.double(&p1);
@@ -234,14 +228,8 @@ mod tests {
         let curve = EllipticCurve::new(a, b, &ctx);
 
         // Points from SageMath output
-        let p1 = Point::Affine {
-            x: FpPolynomialElement::from_vec(&ctx, vec![2]),
-            y: FpPolynomialElement::from_vec(&ctx, vec![5]),
-        };
-        let p2 = Point::Affine {
-            x: FpPolynomialElement::from_vec(&ctx, vec![2]),
-            y: FpPolynomialElement::from_vec(&ctx, vec![6]),
-        };
+        let p1 = curve.point(2.into(), 5.into());
+        let p2 = curve.point(2.into(), 6.into());
 
         // Verify operations
         let double_p1 = curve.double(&p1);
@@ -283,14 +271,8 @@ mod tests {
         let curve = EllipticCurve::new(a, b, &ctx);
 
         // Points from SageMath output
-        let p1 = Point::Affine {
-            x: FpPolynomialElement::from_vec(&ctx, vec![0]),
-            y: FpPolynomialElement::from_vec(&ctx, vec![1]),
-        };
-        let p2 = Point::Affine {
-            x: FpPolynomialElement::from_vec(&ctx, vec![0]),
-            y: FpPolynomialElement::from_vec(&ctx, vec![6]),
-        };
+        let p1 = curve.point(0.into(), 1.into());
+        let p2 = curve.point(0.into(), 6.into());
         let p3 = p2.clone();
 
         // Verify operations

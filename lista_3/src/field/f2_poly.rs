@@ -203,11 +203,10 @@ impl<'a> F2PolynomialElement<'a> {
         while get_binary_poly_degree(&remainder) >= divisor_degree {
             let remainder_degree = get_binary_poly_degree(&remainder);
             let shift = remainder_degree - divisor_degree;
-            for i in 0..divisor.bits() as usize {
-                if i + shift / 64 < remainder.bits() as usize {
-                    remainder ^= divisor << shift;
-                }
-            }
+
+            // Perform single shift and XOR operation
+            let shifted_divisor = divisor << shift;
+            remainder ^= shifted_divisor;
         }
 
         remainder
