@@ -110,6 +110,7 @@ impl<'a> Display for F2PolynomialElement<'a> {
 impl<'a> F2PolynomialElement<'a> {
     pub fn new(ctx: &'a FieldContext, coeffs: BigUint) -> Self {
         assert!(ctx.is_binary());
+        let coeffs = Self::poly_mod(ctx, &coeffs);
         F2PolynomialElement {
             context: ctx,
             coeffs,
