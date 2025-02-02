@@ -1,5 +1,4 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use num::bigint::Sign;
 use std::fmt::Display;
 
 use serde_json;

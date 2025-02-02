@@ -5,9 +5,8 @@ use diffie_hellman::field::ec_binary::{BinaryEllipticCurve, BinaryPoint};
 use diffie_hellman::field::f2_poly::F2PolynomialElement;
 use diffie_hellman::field::fp::FpElement;
 use diffie_hellman::field::fp_poly::FpPolynomialElement;
-use diffie_hellman::{FieldContext, FieldElement};
+use diffie_hellman::FieldContext;
 use num::bigint::{RandBigInt, Sign, ToBigInt};
-use num::traits::sign;
 use num::{BigInt, BigUint, One};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -570,12 +569,6 @@ struct PointECpkParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SignatureECpk {
-    s: Vec<String>,
-    e: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PointParams {
     x: String,
     y: String,
@@ -854,6 +847,8 @@ fn validate_solution_ecpk(base_url: &str, client: &Client) {
         .map(|x| FpElement::new(&ctx, decode_base64(x)))
         .collect::<Vec<FpElement>>();
     let a_param = FpPolynomialElement::new(&ctx, a_param);
+
+    println!("a_param: {}", a_param);
 
     let b_param = params
         .params
@@ -1198,10 +1193,10 @@ fn encode_base64(n: &BigInt) -> String {
     URL_SAFE_NO_PAD.encode(&bytes)
 }
 
-fn encode_base64_le(n: &BigInt) -> String {
-    let (_, bytes) = n.to_bytes_le();
-    URL_SAFE_NO_PAD.encode(&bytes)
-}
+// fn encode_base64_le(n: &BigInt) -> String {
+//     let (_, bytes) = n.to_bytes_le();
+//     URL_SAFE_NO_PAD.encode(&bytes)
+// }
 
 fn encode_base64_biguint(n: &BigUint) -> String {
     let bytes = n.to_bytes_be();
